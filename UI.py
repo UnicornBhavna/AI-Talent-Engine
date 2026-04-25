@@ -154,11 +154,11 @@ col4.metric("Below", f"{(tier_counts.get('Below',0)/total)*100:.1f}%")
 # -----------------------------
 st.subheader("Filtered Data")
 
-display_cols = ["id", "full_name", "final_score", "tier", "sex"]
-available_cols = [c for c in display_cols if c in filtered.columns]
+#display_cols = ["id", "full_name", "final_score", "tier", "sex"]
+#available_cols = [c for c in display_cols if c in filtered.columns]
 
 st.dataframe(
-    filtered[available_cols],
+    filtered,   #[available_cols],
     use_container_width=True,
     height=500
 )
@@ -237,8 +237,6 @@ st.plotly_chart(fig, use_container_width=True)
 # -----------------------------
 # EXPORT
 # -----------------------------
-
-print(filtered.columns)
 
 export_df = filtered[
     [

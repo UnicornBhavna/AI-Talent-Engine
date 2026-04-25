@@ -153,11 +153,11 @@ def score_candidate(record: Dict[str, Any]):
     # -----------------------------
     # TIER (NOW PART OF PIPELINE)
     # -----------------------------
-    if final_score >= 65:
+    if final_score >= 75:
         tier = "A"
-    elif final_score >= 50:
+    elif final_score >= 60:
         tier = "B"
-    elif final_score >= 35:
+    elif final_score >= 50:
         tier = "C"
     else:
         tier = "Below"

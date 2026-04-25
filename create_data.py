@@ -6,164 +6,165 @@ from datetime import datetime
 fake = Faker()
 
 # -----------------------------
-# CORE CONFIG POOLS
+# CORE POOLS
 # -----------------------------
 
-TIER_A_FIRMS = [
-    "Goldman Sachs", "Morgan Stanley", "JPMorgan", "Bank of America",
-    "UBS", "Barclays", "Deutsche Bank"
+COMPANIES = [
+    ("Goldman Sachs", "Investment Banking", "USA"),
+    ("Morgan Stanley", "Investment Banking", "USA"),
+    ("JPMorgan", "Investment Banking", "USA"),
+    ("BlackRock", "Asset Management", "USA"),
+    ("HSBC", "Banking", "UK"),
+    ("Barclays", "Banking", "UK"),
+    ("UBS", "Wealth Management", "Switzerland"),
+    ("Deutsche Bank", "Banking", "Germany"),
+    ("Blackstone", "Private Equity", "USA"),
+    ("KKR", "Private Equity", "USA"),
+    ("Carlyle", "Private Equity", "USA"),
+    ("Bain", "Consulting", "USA"),
 ]
-
-TIER_B_FIRMS = [
-    "BlackRock", "Fidelity Investments", "Wellington", "Schroders",
-    "HSBC", "Standard Chartered", "Nomura", "Mizuho", "RBC",
-    "Citi", "T. Rowe Price"
-]
-
-PE_HEDGE = [
-    "Blackstone", "KKR", "Carlyle", "Apollo", "Brookfield",
-    "Bridgewater", "Renaissance Technologies", "BCG", "Bain"
-]
-
-ASIA_LOCATIONS = ["Singapore", "Hong Kong", "Shanghai", "Mumbai", "Tokyo", "Seoul"]
-WEST_LOCATIONS = ["New York", "London", "San Francisco", "Boston", "Toronto"]
 
 UNIVERSITIES = [
-    "Harvard University", "Stanford University", "Oxford University",
-    "Cambridge University", "NUS", "NTU", "LSE", "MIT",
-    "University of Melbourne"
+    ("Harvard University", "USA", "University"),
+    ("Stanford University", "USA", "University"),
+    ("Oxford University", "UK", "University"),
+    ("Cambridge University", "UK", "University"),
+    ("National University of Singapore", "Singapore", "University"),
+    ("Nanyang Technological University", "Singapore", "University"),
+    ("University of Toronto", "Canada", "University"),
 ]
 
-INDUSTRIES = [
-    "Investment Banking", "Private Equity", "Hedge Fund",
-    "Asset Management", "Consulting"
-]
+JOB_LEVELS = ["Analyst", "Associate", "Senior Associate", "VP"]
+
+ROLES = {
+    "Investment Banking Analyst": "Investment Banking",
+    "Equity Research Analyst": "Research",
+    "Private Equity Associate": "Private Equity",
+    "Hedge Fund Analyst": "Hedge Fund",
+}
+
+INDUSTRIES = ["Banking", "Asset Management", "Private Equity", "Consulting"]
+
+COUNTRIES = ["USA", "UK", "Singapore", "Germany", "Switzerland", "Canada"]
 
 # -----------------------------
 # HELPERS
 # -----------------------------
 
-def random_date(start_year=2015, end_year=2024):
+def maybe_null(value, prob=0.05):
+    """Controlled sparsity (only 5% null max)"""
+    return None if random.random() < prob else value
+
+
+def random_phone():
+    return maybe_null(f"+1-{random.randint(200,999)}-{random.randint(100,999)}-{random.randint(1000,9999)}", 0.03)
+
+
+def random_email(name):
+    return maybe_null(f"{name.lower().replace(' ','.')}@gmail.com", 0.02)
+
+
+def random_date(start=2010, end=2024):
     return fake.date_between(
-        start_date=datetime(start_year, 1, 1),
-        end_date=datetime(end_year, 12, 31)
+        start_date=datetime(start, 1, 1),
+        end_date=datetime(end, 12, 31)
     )
 
-def assign_tier(company):
-    if company in TIER_A_FIRMS:
-        return "A"
-    elif company in TIER_B_FIRMS:
-        return "B"
-    else:
-        return "C"
-
-def generate_gender(tier):
-    r = random.random()
-
-    # realistic skew by tier
-    if tier == "A":
-        return "M" if r < 0.75 else "F"
-    elif tier == "B":
-        return "M" if r < 0.60 else "F"
-    elif tier == "C":
-        return "M" if r < 0.50 else "F"
-    else:
-        return "M" if r < 0.55 else "F"
-
 # -----------------------------
-# PROFILE GENERATOR
+# MAIN PROFILE
 # -----------------------------
 
 def build_profile(i):
 
     full_name = fake.name()
-    first = full_name.split()[0]
-    last = full_name.split()[-1]
+    first_name = full_name.split()[0]
+    last_name = full_name.split()[-1]
 
-    company = random.choice(TIER_A_FIRMS + TIER_B_FIRMS + PE_HEDGE)
-    tier = assign_tier(company)
+    company, industry, company_country = random.choice(COMPANIES)
+    uni, uni_country, school_type = random.choice(UNIVERSITIES)
 
-    sex = generate_gender(tier)
+    job_title = random.choice(list(ROLES.keys()))
+
+    sex = random.choice(["M", "F"])
 
     return {
+        # ---------------- Identity ----------------
         "id": str(i),
-
-        # Identity
         "full_name": full_name,
-        "first_name": first,
-        "middle_name": "",
-        "middle_initial": "",
-        "last_name": last,
-        "last_initial": last[0],
-
-        # Demographics
+        "first_name": first_name,
+        "last_name": last_name,
         "sex": sex,
-        "birth_year": random.randint(1985, 2000),
-        "birth_date": str(random_date(1985, 2000)),
 
-        # Social
-        "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}",
-        "linkedin_username": fake.user_name(),
+        # ---------------- Social ----------------
+        "linkedin_id": maybe_null(fake.random_number(9), 0.02),
 
-        # Job
-        "job_title": random.choice([
-            "Investment Analyst", "Equity Research Analyst",
-            "Private Equity Associate", "Hedge Fund Analyst"
-        ]),
+        # ---------------- Contact ----------------
+        "mobile_phone": random_phone(),
+        "emails": random_email(full_name),
 
+        # ---------------- Industry ----------------
+        "industry": industry,
+
+        # ---------------- Job ----------------
+        "job_title": job_title,
         "job_company_name": company,
-        "job_company_industry": random.choice(INDUSTRIES),
-        "job_company_size": random.choice(["1-10", "11-50", "51-200", "200-1000"]),
+        "job_company_industry": industry,
 
-        # Location
-        "location_name": random.choice(ASIA_LOCATIONS + WEST_LOCATIONS),
-        "location_country": random.choice(["India", "USA", "UK", "Singapore"]),
-        "location_continent": random.choice(["Asia", "North America", "Europe"]),
+        # ---------------- Location ----------------
+        "all_countries": random.sample(COUNTRIES, k=random.randint(1, 2)),
+        "location_last_updated": str(random_date(2020, 2024)),
 
-        # Skills
-        "skills": random.sample([
-            "financial modeling", "valuation", "equity research",
-            "Python", "Excel", "portfolio management"
-        ], 3),
-
-        # Experience
+        # ---------------- Experience ----------------
         "experience": [
             {
+                "title": job_title,
+                "clean_title": job_title,
+                "role": ROLES[job_title],
+                "levels": random.choice(JOB_LEVELS),
                 "company": company,
-                "title": "Analyst",
-                "start_date": str(random_date(2018, 2022)),
-                "end_date": None,
-                "is_primary": True
+                "company_name_clean": company,
+                "company_country": company_country
             }
         ],
 
-        # Education
+        # ---------------- Education ----------------
         "education": [
             {
-                "school": random.choice(UNIVERSITIES),
-                "degrees": ["Bachelors"],
-                "majors": ["Finance"],
-                "start_date": str(random_date(2010, 2016)),
-                "end_date": str(random_date(2016, 2020))
+                "school": uni,
+                "school_country": uni_country,
+                "school_type": school_type,
+                "end_date": str(random_date(2015, 2022)),
+                "degree": random.choice(["Bachelors", "Masters"])
             }
-        ],
-
-        "dataset_version": "1.1"
+        ]
     }
+
 
 # -----------------------------
 # GENERATE DATASET
 # -----------------------------
 
-def generate(n=1000000):
-    return [build_profile(i) for i in range(n)]
+def generate(n):
+    data = []
+    for i in range(n):
+        data.append(build_profile(i))
+        if i % 5000 == 0:
+            print(f"Generated {i} records...")
+    return data
+
 
 # -----------------------------
 # SAVE
 # -----------------------------
 
-if __name__ == "__main__":
-    data = generate(1000000)
-    df = pd.DataFrame(data)
-    df.to_csv("candidates.csv", index=False)
-    print("Generated realistic candidates.csv ✔")
+data = generate(50000)
+
+print("Generation complete. Converting to DataFrame...")
+
+df = pd.DataFrame(data)
+
+print("DataFrame created:", df.shape)
+
+df.to_csv("candidates.csv", index=False)
+
+print("Generated clean structured candidates.csv ✔")

@@ -2,8 +2,9 @@
 Responsibilities:
 1. Authenticate API via .env
 2. Fetch paginated candidate data with rate-limit handling
-3. Clean/normalize raw response
-4. Persist raw + cleaned datasets for downstream scoring
+3. Clean/normalize + FLATTEN important fields
+4. Preserve raw payload for debugging
+5. Persist structured dataset for scoring + UI
 """
 
 import requests
@@ -19,35 +20,45 @@ import time
 
 BASE_URL = "https://api.coresignal.com/cdapi/v1/professional_network/person/search"
 PER_PAGE = 100
-MAX_PAGES = 50  # safety cap to avoid infinite loops
+MAX_PAGES = 50
 SLEEP_BETWEEN_CALLS = 1
 
 # -----------------------------
 # AUTH
 # -----------------------------
 
-# Load API key
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 API_KEY = os.getenv("API_KEY")
 
-headers = {
+HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json"
 }
+
+# -----------------------------
+# GENDER NORMALIZATION
+# -----------------------------
+
+def normalize_gender(value):
+    if value is None:
+        return "U"
+
+    v = str(value).strip().lower()
+
+    if v in ["m", "male", "man", "mr"]:
+        return "M"
+
+    if v in ["f", "female", "woman", "ms", "mrs"]:
+        return "F"
+
+    return "U"
+
 
 # -----------------------------
 # FETCH LAYER
 # -----------------------------
 
 def fetch_all() -> list:
-    """
-    Fetches paginated candidate data from API.
-
-    Handles:
-    - pagination
-    - rate limiting (429)
-    - basic retry logic
-    """
 
     all_records = []
     page = 1
@@ -58,18 +69,10 @@ def fetch_all() -> list:
             "page": page,
             "per_page": PER_PAGE,
             "filters": {
-                "location": [
-                    "United States",
-                    "United Kingdom",
-                    "Australia",
-                    "Hong Kong"
-                ],
+                "location": ["United States", "United Kingdom", "Australia", "Hong Kong"],
                 "job_title": [
-                    "Analyst",
-                    "Investment Analyst",
-                    "Investment Banking Analyst",
-                    "Research Analyst",
-                    "Associate"
+                    "Analyst", "Investment Analyst",
+                    "Investment Banking Analyst", "Research Analyst", "Associate"
                 ]
             }
         }
@@ -82,85 +85,106 @@ def fetch_all() -> list:
             time.sleep(5)
             continue
 
-        # Rate limit handling
         if res.status_code == 429:
-            print("Rate limited — sleeping before retry...")
             time.sleep(5)
             continue
 
         if res.status_code != 200:
-            print(f"API Error (page {page}): {res.status_code} - {res.text}")
+            print(f"API Error: {res.status_code}")
             break
 
         data = res.json().get("results", [])
 
         if not data:
-            print("No more data returned — stopping pagination.")
             break
 
         all_records.extend(data)
-        print(f"Page {page} fetched | Total records: {len(all_records)}")
+        print(f"Page {page} | total: {len(all_records)}")
 
         page += 1
         time.sleep(SLEEP_BETWEEN_CALLS)
 
     return all_records
 
+
 # -----------------------------
-# TRANSFORM LAYER
+# TRANSFORM LAYER (IMPORTANT FIX)
 # -----------------------------
 
 def extract(records: list) -> list:
-    """
-    Extracts only relevant fields for downstream scoring.
-    Keeps schema lightweight and stable.
-    """
 
     cleaned = []
 
     for r in records:
+
         cleaned.append({
-            "full_name": r['full_name'],     #r.get("full_name"),
-            "job_title": r['job_title'],                 #r.get("job_title"),
-            "current_company": r['current_company'],          #r.get("current_company"),
-            "location": r['location'],              #r.get("location"),
-            "linkedin_url": r['linkedin_url'],             #r.get("linkedin_url"),
-            "raw": r  # keep full payload for debugging/scoring enrichment
+
+            # ---------------- Identity ----------------
+            "id": r.get("id"),
+            "full_name": r.get("full_name"),
+
+            # ---------------- Job ----------------
+            "job_title": r.get("job_title"),
+            "current_company": r.get("current_company"),
+            "industry": r.get("industry"),
+
+            # ---------------- Location ----------------
+            "location": r.get("location"),
+            "countries": r.get("countries"),
+
+            # ---------------- Social ----------------
+            "linkedin_url": r.get("linkedin_url"),
+            "linkedin_id": r.get("linkedin_id"),
+
+            # ---------------- Contact ----------------
+            "mobile_phone": r.get("mobile_phone"),
+            "emails": r.get("emails"),
+
+            # ---------------- Gender ----------------
+            "sex": normalize_gender(r.get("sex") or r.get("gender")),
+
+            # ---------------- Experience (structured) ----------------
+            "experience": r.get("experience"),
+
+            # ---------------- Education (structured) ----------------
+            "education": r.get("education"),
+
+            # ---------------- Metadata ----------------
+            "location_last_updated": r.get("location_last_updated"),
+
+            # ---------------- FULL RAW ----------------
+            "raw": r
         })
 
     return cleaned
 
+
 # -----------------------------
-# PERSISTENCE LAYER
+# SAVE
 # -----------------------------
 
-def save_csv(data: list) -> None:
-    """Saves cleaned dataset for audit + downstream reuse."""
-
+def save_csv(data: list):
     df = pd.DataFrame(data)
     df.to_csv("candidates.csv", index=False)
-    print(f"Saved {len(df)} records to candidates.csv")
+    print(f"Saved {len(df)} records → candidates.csv")
+
 
 # -----------------------------
-# ORCHESTRATION
+# MAIN
 # -----------------------------
 
 def main():
-    """
-    End-to-end ingestion run:
-    API → Raw → Clean → CSV
-    """
-
     print("Starting ingestion pipeline...")
 
-    #records = fetch_all()
+  #  records = fetch_all()
     df = pd.read_csv("candidates.csv")
     records = df.to_dict(orient="records")
 
-    print(f"Raw records fetched: {len(records)}")
+    print(f"Fetched: {len(records)} records")
 
     cleaned = extract(records)
-    print(f"Cleaned records: {len(cleaned)}")
+
+    print(f"Cleaned: {len(cleaned)} records")
 
     save_csv(cleaned)
 

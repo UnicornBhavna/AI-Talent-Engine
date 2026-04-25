@@ -143,21 +143,19 @@ st.subheader("Dataset Overview")
 
 total = len(df)
 
-tier_a = len(df[df["tier"] == "A"])
-tier_b = len(df[df["tier"] == "B"])
-tier_c = len(df[df["tier"] == "C"])
-tier_below = len(df[df["tier"] == "Below"])
+tier_a = df[df["tier"] == "A"]
+tier_b = df[df["tier"] == "B"]
+tier_c = df[df["tier"] == "C"]
+tier_below = df[df["tier"] == "Below"]
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
-col1.metric("Total", f"{total}", "All candidates")
+col1.metric("Total", f"{total}")
 
-col2.metric("Tier A", f"{tier_a} ({tier_a/total:.1%})")
-col3.metric("Tier B", f"{tier_b} ({tier_b/total:.1%})")
-col4.metric("Tier C", f"{tier_c} ({tier_c/total:.1%})")
-col5.metric("Below", f"{tier_below} ({tier_below/total:.1%})")
-
-st.divider()
+col2.metric("Tier A", f"{len(tier_a)/total:.1%}")
+col3.metric("Tier B", f"{len(tier_b)/total:.1%}")
+col4.metric("Tier C", f"{len(tier_c)/total:.1%}")
+col5.metric("Below", f"{len(tier_below)/total:.1%}")
 
 # -----------------------------
 # TABLE
@@ -215,5 +213,6 @@ st.download_button(
     "⬇ Download Filtered Shortlist",
     csv,
     "shortlist.csv",
-    "text/csv"
+    "text/csv",
+    help="Downloads the currently filtered candidate shortlist including score, tier, and flags for offline analysis or reporting."
 )

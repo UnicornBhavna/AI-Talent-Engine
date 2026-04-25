@@ -1,11 +1,12 @@
 from faker import Faker
 import random
 import pandas as pd
+from datetime import datetime
 
 fake = Faker()
 
 # -----------------------------
-# REALISTIC SEGMENTATION POOLS
+# CORE CONFIG POOLS
 # -----------------------------
 
 TIER_A_FIRMS = [
@@ -24,113 +25,145 @@ PE_HEDGE = [
     "Bridgewater", "Renaissance Technologies", "BCG", "Bain"
 ]
 
-ASIA_LOCATIONS = [
-    "Singapore", "Hong Kong", "Shanghai", "Beijing",
-    "Mumbai", "Bengaluru", "Tokyo", "Seoul"
+ASIA_LOCATIONS = ["Singapore", "Hong Kong", "Shanghai", "Mumbai", "Tokyo", "Seoul"]
+WEST_LOCATIONS = ["New York", "London", "San Francisco", "Boston", "Toronto"]
+
+UNIVERSITIES = [
+    "Harvard University", "Stanford University", "Oxford University",
+    "Cambridge University", "NUS", "NTU", "LSE", "MIT",
+    "University of Melbourne"
 ]
 
-WEST_LOCATIONS = [
-    "New York", "London", "San Francisco", "Chicago",
-    "Boston", "Toronto"
-]
-
-ELITE_UNI = [
-    "Oxford", "Cambridge", "Harvard", "Stanford",
-    "NUS", "NTU", "LSE", "MIT"
-]
-
-MID_UNI = [
-    "University of Melbourne", "NYU", "University of Toronto",
-    "National University of Singapore", "University of Hong Kong"
-]
-
-JOB_TITLES = [
-    "Investment Analyst",
-    "Equity Research Analyst",
-    "Investment Banking Analyst",
-    "Private Equity Associate",
-    "Hedge Fund Analyst"
+INDUSTRIES = [
+    "Investment Banking", "Private Equity", "Hedge Fund",
+    "Asset Management", "Consulting"
 ]
 
 # -----------------------------
-# PROFILE GENERATORS (KEY FIX)
+# HELPERS
 # -----------------------------
 
-def generate_tier_a():
-    return {
-        "id": fake.uuid4(),
-        "full_name": fake.name(),
-        "current_company": random.choice(TIER_A_FIRMS),
-        "job_title": random.choice(JOB_TITLES),
-        "location": random.choice(ASIA_LOCATIONS),   # forced returnee signal
-        "education": random.choice(ELITE_UNI),
-        "years_experience": random.randint(2, 8),
-        "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}"
-    }
+def random_date(start_year=2015, end_year=2024):
+    return fake.date_between(
+        start_date=datetime(start_year, 1, 1),
+        end_date=datetime(end_year, 12, 31)
+    )
 
-def generate_tier_b():
-    return {
-        "id": fake.uuid4(),
-        "full_name": fake.name(),
-        "current_company": random.choice(TIER_B_FIRMS + PE_HEDGE),
-        "job_title": random.choice(JOB_TITLES),
-        "location": random.choice(WEST_LOCATIONS + ASIA_LOCATIONS),
-        "education": random.choice(MID_UNI + ELITE_UNI),
-        "years_experience": random.randint(1, 10),
-        "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}"
-    }
+def assign_tier(company):
+    if company in TIER_A_FIRMS:
+        return "A"
+    elif company in TIER_B_FIRMS:
+        return "B"
+    else:
+        return "C"
 
-def generate_tier_c():
-    return {
-        "id": fake.uuid4(),
-        "full_name": fake.name(),
-        "current_company": random.choice(TIER_B_FIRMS),
-        "job_title": random.choice(JOB_TITLES),
-        "location": random.choice(WEST_LOCATIONS),
-        "education": random.choice(MID_UNI),
-        "years_experience": random.randint(0, 6),
-        "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}"
-    }
+def generate_gender(tier):
+    r = random.random()
 
-def generate_below():
+    # realistic skew by tier
+    if tier == "A":
+        return "M" if r < 0.75 else "F"
+    elif tier == "B":
+        return "M" if r < 0.60 else "F"
+    elif tier == "C":
+        return "M" if r < 0.50 else "F"
+    else:
+        return "M" if r < 0.55 else "F"
+
+# -----------------------------
+# PROFILE GENERATOR
+# -----------------------------
+
+def build_profile(i):
+
+    full_name = fake.name()
+    first = full_name.split()[0]
+    last = full_name.split()[-1]
+
+    company = random.choice(TIER_A_FIRMS + TIER_B_FIRMS + PE_HEDGE)
+    tier = assign_tier(company)
+
+    sex = generate_gender(tier)
+
     return {
-        "id": fake.uuid4(),
-        "full_name": fake.name(),
-        "current_company": "Unknown Firm",
-        "job_title": "Analyst",
-        "location": random.choice(WEST_LOCATIONS),
-        "education": "Unknown University",
-        "years_experience": random.randint(0, 2),
-        "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}"
+        "id": str(i),
+
+        # Identity
+        "full_name": full_name,
+        "first_name": first,
+        "middle_name": "",
+        "middle_initial": "",
+        "last_name": last,
+        "last_initial": last[0],
+
+        # Demographics
+        "sex": sex,
+        "birth_year": random.randint(1985, 2000),
+        "birth_date": str(random_date(1985, 2000)),
+
+        # Social
+        "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}",
+        "linkedin_username": fake.user_name(),
+
+        # Job
+        "job_title": random.choice([
+            "Investment Analyst", "Equity Research Analyst",
+            "Private Equity Associate", "Hedge Fund Analyst"
+        ]),
+
+        "job_company_name": company,
+        "job_company_industry": random.choice(INDUSTRIES),
+        "job_company_size": random.choice(["1-10", "11-50", "51-200", "200-1000"]),
+
+        # Location
+        "location_name": random.choice(ASIA_LOCATIONS + WEST_LOCATIONS),
+        "location_country": random.choice(["India", "USA", "UK", "Singapore"]),
+        "location_continent": random.choice(["Asia", "North America", "Europe"]),
+
+        # Skills
+        "skills": random.sample([
+            "financial modeling", "valuation", "equity research",
+            "Python", "Excel", "portfolio management"
+        ], 3),
+
+        # Experience
+        "experience": [
+            {
+                "company": company,
+                "title": "Analyst",
+                "start_date": str(random_date(2018, 2022)),
+                "end_date": None,
+                "is_primary": True
+            }
+        ],
+
+        # Education
+        "education": [
+            {
+                "school": random.choice(UNIVERSITIES),
+                "degrees": ["Bachelors"],
+                "majors": ["Finance"],
+                "start_date": str(random_date(2010, 2016)),
+                "end_date": str(random_date(2016, 2020))
+            }
+        ],
+
+        "dataset_version": "1.1"
     }
 
 # -----------------------------
-# MAIN GENERATOR
+# GENERATE DATASET
 # -----------------------------
 
-def generate_candidates(n=10000):
-    data = []
-
-    for _ in range(n):
-        r = random.random()
-
-        if r < 0.20:
-            data.append(generate_tier_a())
-        elif r < 0.55:
-            data.append(generate_tier_b())
-        elif r < 0.85:
-            data.append(generate_tier_c())
-        else:
-            data.append(generate_below())
-
-    return pd.DataFrame(data)
-
+def generate(n=1000000):
+    return [build_profile(i) for i in range(n)]
 
 # -----------------------------
 # SAVE
 # -----------------------------
 
-df = generate_candidates(10000)
-df.to_csv("candidates.csv", index=False)
-
-print("Generated realistic candidates.csv ✔")
+if __name__ == "__main__":
+    data = generate(1000000)
+    df = pd.DataFrame(data)
+    df.to_csv("candidates.csv", index=False)
+    print("Generated realistic candidates.csv ✔")

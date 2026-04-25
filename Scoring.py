@@ -246,7 +246,7 @@ def load_input(file_path: str):
 def run_pipeline(input_path: str, output_path: str = "scored_output.csv"):
     """
     End-to-end scoring pipeline:
-    input → score → save output
+    Keeps full original dataset + appends scoring outputs.
     """
 
     print(f"Loading data from {input_path}...")
@@ -259,19 +259,23 @@ def run_pipeline(input_path: str, output_path: str = "scored_output.csv"):
 
     for r in records:
         try:
-            scored.append(score_candidate(r))
-        except Exception as e:
-            # skip bad rows safely
+            score_output = score_candidate(r)
+
+            # ✅ MERGE ORIGINAL + SCORED FIELDS
+            merged = {**r, **score_output}
+
+            scored.append(merged)
+
+        except Exception:
             continue
 
     print(f"Successfully scored: {len(scored)}")
 
-    # convert to dataframe for saving
     df = pd.DataFrame(scored)
 
     df.to_csv(output_path, index=False)
 
-    print(f"Saved output to {output_path}")
+    print(f"Saved enriched dataset to {output_path}")
 
 
 # -----------------------------

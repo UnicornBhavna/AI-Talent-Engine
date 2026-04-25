@@ -74,7 +74,7 @@ def load_data():
     # FIX: Clean null-like values
     # -----------------------------
     df = df.fillna("")
-    df.rename({'shortlist_tier':'tier'}, inplace=True)
+    df.rename(columns={'shortlist_tier': 'tier'}, inplace=True)
 
     return df
 

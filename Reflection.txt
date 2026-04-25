@@ -1,0 +1,38 @@
+
+
+1. How many candidates ended up in Tier A / B / C / Below threshold? How many diversity-flagged candidates are in Tier A?
+
+Out of 50,000 candidates, ~2.7% (≈1,350) are Tier A, 55.2% (≈27,600) Tier B, 26.8% (≈13,400) Tier C, and 15.4% (≈7,700) fall below threshold. The pipeline is heavily skewed toward Tier B, suggesting moderate selectivity.
+Tier A is a very small, high-quality segment.
+
+Diversity Count for Tier A:
+False - 34845
+True - 15155
+
+
+2. Pick one Tier A candidate. Show their full score breakdown and write 2-3 sentences on whether the score feels right — and if not, what that tells you about the model.
+
+A typical Tier A candidate likely scores high across experience, skills match, and education signals.
+
+Candidate Name - Li Merritt
+
+Score breakdown:
+- Employer pedigree: 40
+- Role relevance: 15
+- Tenure fit: 6
+- Returnee signal: 25
+- Total: 86 (Tier A)
+
+The score feels somewhat inflated, mainly due to the heavy weight on employer pedigree (UBS) and returnee signal (25 points). The “None years experience” and low tenure fit (6) suggest weak actual experience, which should have pulled the score down more. This indicates the model is overweighting proxy signals (brand + returnee) over real experience, leading to potentially over-ranked candidates.
+
+
+3. The returnee signal and diversity flag are both inferred from imperfect proxies. Name the two most likely failure modes in your implementation — where will it confidently misclassify? What is the right human-in-the-loop step before a recruiter acts on these flags?
+
+First, returnee misclassification: candidates studying/working abroad briefly may be incorrectly flagged as returnees. Second, diversity proxy errors: name-based or heuristic inference can misclassify gender or background.
+Both errors are high-confidence but wrong due to weak proxies. A human review step should validate flagged attributes before recruiter decisions—especially for sensitive attributes like diversity.
+
+
+4. One thing you would change if you had a paid API tier and a second day.
+
+Firstly, I will get more real time data for my analysis. I’d replace heuristic scoring with an LLM-based structured evaluator (e.g., GPT) to assess experience relevance and role fit. This would reduce reliance on keyword matching and improve contextual understanding. Additionally, I’d add explanation outputs (why a candidate is Tier A) to increase trust and auditability.
+

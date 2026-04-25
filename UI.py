@@ -174,11 +174,14 @@ plot_df = filtered.copy()
 
 # CREATE SCORE BINS
 bins = list(range(0, 101, 10))
-plot_df["score_bin"] = pd.cut(plot_df["final_score"], bins=bins, include_lowest=True)
 
-# bin labels (x-axis)
-bin_labels = [f"{i}-{i+9}" for i in range(0, 100, 10)]
-bin_labels[-1] = "90-100"
+plot_df["score_bin"] = pd.cut(
+    plot_df["final_score"],
+    bins=bins,
+    include_lowest=True
+)
+
+bin_index = plot_df["score_bin"].cat.categories
 
 # PIVOT TABLES
 tier_pivot = pd.crosstab(plot_df["score_bin"], plot_df["tier"]).reindex(columns=["A", "B", "C", "Below"], fill_value=0)

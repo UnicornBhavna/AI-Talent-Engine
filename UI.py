@@ -128,7 +128,7 @@ col4.metric("Below", f"{(tier_counts.get('Below',0)/total)*100:.1f}%")
 # -----------------------------
 # TABLE (FILTERED)
 # -----------------------------
-st.subheader("Ranked Shortlist")
+st.subheader("Filtered Data Visualisation")
 
 display_cols = ["id", "full_name", "final_score", "tier", "sex"]
 available_cols = [c for c in display_cols if c in filtered.columns]
@@ -138,8 +138,6 @@ st.dataframe(
     use_container_width=True,
     height=500
 )
-
-st.subheader("Tier Distribution with Gender Overlay")
 
 import plotly.graph_objects as go
 
@@ -167,8 +165,6 @@ tier_counts.columns = ["tier", "count"]
 # -----------------------------
 gender_counts = plot_df["sex"].value_counts().reset_index()
 gender_counts.columns = ["sex", "count"]
-
-st.subheader("Score Distribution: Tier vs Gender (Dual Axis)")
 
 import numpy as np
 import plotly.graph_objects as go

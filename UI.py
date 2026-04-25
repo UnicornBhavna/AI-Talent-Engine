@@ -183,9 +183,13 @@ gender_counts = plot_df["sex"].value_counts().reset_index()
 gender_counts.columns = ["sex", "count"]
 
 # CREATE SCORE BINS
-bins = list(range(0, 101, 10))  # 0-100 in steps of 5
-plot_df["score_bin"] = pd.cut(plot_df["final_score"], bins=bins)
-bin_centers = [interval.mid for interval in plot_df["score_bin"].cat.categories]
+bins = list(range(0, 101, 10))
+
+plot_df["score_bin"] = pd.cut(
+    plot_df["final_score"],
+    bins=bins,
+    include_lowest=True
+)
 
 # TIER COUNTS PER BIN (Y1)
 tier_pivot = plot_df.groupby(["score_bin", "tier"]).size().unstack(fill_value=0)
@@ -194,7 +198,14 @@ tier_pivot = plot_df.groupby(["score_bin", "tier"]).size().unstack(fill_value=0)
 gender_pivot = plot_df.groupby(["score_bin", "sex"]).size().unstack(fill_value=0)
 
 # FIGURE
-fig = go.Figure()
+fig = px.histogram(
+    plot_df,
+    x="final_score",
+    color="tier",
+    nbins=10
+)
+
+fig.update_xaxes(range=[0, 100])
 
 # --- Tier (Y1: bars stacked feel via multiple traces)
 for tier in ["A", "B", "C", "Below"]:

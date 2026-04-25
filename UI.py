@@ -57,6 +57,7 @@ def load_data():
     #return pd.read_csv("scored_output.csv")
 
 df = load_data()
+full_df = df.copy()
 
 # -----------------------------
 # SAFETY CHECKS
@@ -136,7 +137,7 @@ gender_filter = st.sidebar.multiselect(
 # APPLY FILTERS (SINGLE SOURCE OF TRUTH)
 # -----------------------------
 
-filtered = df.copy()
+filtered = full_df.copy()
 
 filtered = filtered[filtered["final_score"] >= min_score]
 filtered = filtered[filtered["tier"].isin(tier_filter)]
@@ -179,17 +180,30 @@ st.dataframe(
 )
 
 # -----------------------------
-# CHART (FILTERED)
+# CHART (FILTERED + GENDER INCLUDED)
 # -----------------------------
 
-st.subheader("Score Distribution (Filtered View)")
+st.subheader("Score Distribution (Tier + Gender)")
+
+if "sex" in filtered.columns:
+    filtered["tier_gender"] = filtered["tier"] + " | " + filtered["sex"]
+else:
+    filtered["tier_gender"] = filtered["tier"]
 
 fig = px.histogram(
     filtered,
     x="final_score",
-    color="tier",
+    color="tier_gender",
     nbins=20,
-    barmode="overlay"
+    barmode="overlay",
+    category_orders={
+        "tier_gender": [
+            "A | M", "A | F",
+            "B | M", "B | F",
+            "C | M", "C | F",
+            "Below | M", "Below | F"
+        ]
+    }
 )
 
 st.plotly_chart(fig, use_container_width=True)

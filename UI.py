@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datasets import load_dataset
+import plotly.graph_objects as go
+import numpy as np
 
 # -----------------------------
 # CONFIG
@@ -150,7 +152,7 @@ col4.metric("Below", f"{(tier_counts.get('Below',0)/total)*100:.1f}%")
 # -----------------------------
 # TABLE (FILTERED)
 # -----------------------------
-st.subheader("Filtered Data Visualisation")
+st.subheader("Filtered Data")
 
 display_cols = ["id", "full_name", "final_score", "tier", "sex"]
 available_cols = [c for c in display_cols if c in filtered.columns]
@@ -161,59 +163,37 @@ st.dataframe(
     height=500
 )
 
-import plotly.graph_objects as go
 
-plot_df = full_df.copy()
+# -----------------------------
+# Visual
+# -----------------------------
+
+st.subheader("Filtered Data Visualisation")
+
+plot_df = filtered.copy()
 
 # jitter so points don't overlap perfectly
 plot_df["jitter"] = plot_df["final_score"] + (plot_df["sex"].map({"M": -0.5, "F": 0.5}).fillna(0))
 
-fig = go.Figure()
-
-st.subheader("Tier Distribution + Gender Overlay (Dual Axis)")
-
-import plotly.graph_objects as go
-
-plot_df = full_df.copy()
-
-# -----------------------------
-# TIER COUNTS (HISTOGRAM DATA)
-# -----------------------------
 tier_counts = plot_df["tier"].value_counts().reset_index()
 tier_counts.columns = ["tier", "count"]
 
-# -----------------------------
 # GENDER COUNTS
-# -----------------------------
 gender_counts = plot_df["sex"].value_counts().reset_index()
 gender_counts.columns = ["sex", "count"]
 
-import numpy as np
-import plotly.graph_objects as go
-
-plot_df = full_df.copy()
-
-# -----------------------------
 # CREATE SCORE BINS
-# -----------------------------
-bins = list(range(0, 101, 5))  # 0-100 in steps of 5
+bins = list(range(0, 101, 10))  # 0-100 in steps of 5
 plot_df["score_bin"] = pd.cut(plot_df["final_score"], bins=bins)
-
 bin_centers = [interval.mid for interval in plot_df["score_bin"].cat.categories]
 
-# -----------------------------
 # TIER COUNTS PER BIN (Y1)
-# -----------------------------
 tier_pivot = plot_df.groupby(["score_bin", "tier"]).size().unstack(fill_value=0)
 
-# -----------------------------
 # GENDER COUNTS PER BIN (Y2)
-# -----------------------------
 gender_pivot = plot_df.groupby(["score_bin", "sex"]).size().unstack(fill_value=0)
 
-# -----------------------------
 # FIGURE
-# -----------------------------
 fig = go.Figure()
 
 # --- Tier (Y1: bars stacked feel via multiple traces)
@@ -237,9 +217,7 @@ for gender in ["M", "F"]:
             yaxis="y2"
         ))
 
-# -----------------------------
 # LAYOUT (DUAL AXIS)
-# -----------------------------
 fig.update_layout(
     barmode="stack",
     xaxis=dict(title="Score (Binned)"),
@@ -255,10 +233,11 @@ fig.update_layout(
     ),
 
     legend=dict(title="Legend"),
-    height=550
+    height=700
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
 
 # -----------------------------
 # EXPORT

@@ -238,9 +238,7 @@ st.plotly_chart(fig, use_container_width=True)
 # EXPORT
 # -----------------------------
 
-export_df = filtered.rename(columns={
-    "current_title_employer": "current_title + employer"
-})[
+export_df = filtered[
     [
         "full_name",
         "current_title + employer",

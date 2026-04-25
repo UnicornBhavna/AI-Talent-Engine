@@ -133,13 +133,15 @@ gender_filter = st.sidebar.multiselect(
 )
 
 # -----------------------------
-# APPLY FILTERS
+# APPLY FILTERS (SINGLE SOURCE OF TRUTH)
 # -----------------------------
 
-filtered = df[df["final_score"] >= min_score]
+filtered = df.copy()
+
+filtered = filtered[filtered["final_score"] >= min_score]
 filtered = filtered[filtered["tier"].isin(tier_filter)]
 
-if "sex" in df.columns:
+if "sex" in filtered.columns:
     filtered = filtered[filtered["sex"].isin(gender_filter)]
 
 filtered = filtered.sort_values("final_score", ascending=False)
@@ -162,12 +164,12 @@ col3.metric("Tier B", f"{(tier_counts.get('B',0)/total)*100:.1f}%")
 col4.metric("Tier C + Below", f"{((tier_counts.get('C',0)+tier_counts.get('Below',0))/total)*100:.1f}%")
 
 # -----------------------------
-# TABLE
+# TABLE (FILTERED)
 # -----------------------------
 
-st.subheader("Ranked Shortlist")
+st.subheader("Ranked Shortlist (Filtered)")
 
-display_cols = ["id", "full_name", "final_score", "tier"]
+display_cols = ["id", "full_name", "final_score", "tier", "sex"]
 available_cols = [c for c in display_cols if c in filtered.columns]
 
 st.dataframe(
@@ -177,7 +179,7 @@ st.dataframe(
 )
 
 # -----------------------------
-# CHART
+# CHART (FILTERED)
 # -----------------------------
 
 st.subheader("Score Distribution (Filtered View)")
@@ -193,14 +195,13 @@ fig = px.histogram(
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# EXPORT
+# EXPORT (FILTERED DATA ONLY)
 # -----------------------------
-
-csv = filtered.to_csv(index=False).encode("utf-8")
 
 st.download_button(
     "⬇ Download Filtered Shortlist",
-    csv,
+    filtered.to_csv(index=False).encode("utf-8"),
     "shortlist.csv",
-    "text/csv"
+    "text/csv",
+    help="Exports exactly what is shown in the filtered table and chart."
 )

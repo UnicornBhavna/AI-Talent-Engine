@@ -138,7 +138,9 @@ st.subheader("Dataset Overview")
 total = len(full_df)
 tier_counts = full_df["tier"].value_counts() if "tier" in full_df.columns else {}
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
+
+col5.metric("Total Candidates", total)
 
 col1.metric("Tier A", f"{(tier_counts.get('A',0)/total)*100:.1f}%")
 col2.metric("Tier B", f"{(tier_counts.get('B',0)/total)*100:.1f}%")

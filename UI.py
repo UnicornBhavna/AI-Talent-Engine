@@ -86,10 +86,10 @@ st.sidebar.markdown("""
 
 <b>Tier Definition (Based on AI Score)</b><br><br>
 
-• <b>Tier A</b> → final_score ≥ 75 (top-performing, high-confidence candidates)<br>
-• <b>Tier B</b> → 60 ≤ final_score < 75 (strong candidates with competitive profiles)<br>
-• <b>Tier C</b> → 50 ≤ final_score < 60 (mid-range candidates with mixed signals)<br>
-• <b>Below</b> → final_score < 50 (low-fit or weak signal profiles)<br>
+• <b>Tier A</b> → final_score ≥ 75 (elite candidates)<br>
+• <b>Tier B</b> → 60–74 (strong candidates)<br>
+• <b>Tier C</b> → 50–59 (mid-range candidates)<br>
+• <b>Below</b> → < 50 (low-fit candidates)<br>
 
 </div>
 """, unsafe_allow_html=True)

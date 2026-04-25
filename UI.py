@@ -14,8 +14,14 @@ st.set_page_config(
 )
 
 # -----------------------------
-# THEME (CLEAN WHITE UI)
+# THEME (UI LAYER ONLY)
 # -----------------------------
+"""
+WHY:
+- Keeps UI visually consistent
+- Ensures analytics view is readable for recruiters
+- No impact on logic or scoring
+"""
 
 st.markdown("""
     <style>
@@ -49,8 +55,18 @@ st.title("Candidate Intelligence Dashboard")
 st.caption("AI-powered sourcing analytics for talent screening and ranking")
 
 # -----------------------------
-# DATA LOADING
+# DATA LOADING (HUGGING FACE)
 # -----------------------------
+"""
+WHY THIS APPROACH:
+- Uses HF dataset as single source of truth
+- Avoids local file dependency (Streamlit Cloud safe)
+- Ensures reproducibility across environments
+
+LIMITATION:
+- Requires dataset repo to be public OR authenticated
+- Assumes dataset has a default 'train' split
+"""
 
 @st.cache_data
 def load_data():
@@ -59,6 +75,10 @@ def load_data():
 
 df = load_data()
 
+# -----------------------------
+# SAFETY CHECKS
+# -----------------------------
+
 if df.empty:
     st.error("Dataset is empty or failed to load.")
     st.stop()
@@ -66,11 +86,16 @@ if df.empty:
 if "final_score" not in df.columns:
     st.error("Missing required column: final_score")
     st.stop()
-    
 
 # -----------------------------
-# TIERING
+# TIERING LOGIC
 # -----------------------------
+"""
+WHY:
+- Converts continuous score into interpretable recruiter buckets
+- Enables filtering + segmentation in UI
+- Makes ranking explainable
+"""
 
 def assign_tier(score):
     if score >= 65:
@@ -84,18 +109,24 @@ def assign_tier(score):
 df["tier"] = df["final_score"].apply(assign_tier)
 
 # -----------------------------
-# SAFE FEMALE FLAG EXTRACTION
+# DIVERSITY FLAG EXTRACTION
 # -----------------------------
+"""
+WHY:
+- Extracts structured demographic signal safely
+- Prevents runtime crashes from malformed HF data
+
+LIMITATION:
+- This is heuristic-based upstream output
+- Should NOT be used for decision-making or ranking
+"""
 
 def extract_female(x):
     if isinstance(x, dict):
         return x.get("is_female", False)
     return False
 
-if "diversity_flag" in df.columns:
-    df["is_female"] = df["diversity_flag"].apply(extract_female)
-else:
-    df["is_female"] = False
+df["is_female"] = df["diversity_flag"].apply(extract_female) if "diversity_flag" in df.columns else False
 
 # -----------------------------
 # SIDEBAR CONTROLS
@@ -105,7 +136,7 @@ st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
 Use filters to refine candidate shortlist.
-All metrics above remain constant for dataset comparison.
+All metrics are derived from precomputed scoring pipeline.
 """)
 
 min_score = st.sidebar.slider(
@@ -122,12 +153,17 @@ tier_filter = st.sidebar.multiselect(
 
 diversity_only = st.sidebar.checkbox(
     "Diversity Only (Female candidates)",
-    help="Filters candidates flagged as female using heuristic signal (low confidence)."
+    help="Uses heuristic gender proxy (low confidence, non-decision feature)."
 )
 
 # -----------------------------
-# APPLY FILTERS (VIEW DATA ONLY)
+# APPLY FILTERS
 # -----------------------------
+"""
+WHY:
+- Ensures filtering does NOT modify original dataset
+- Keeps UI state independent of underlying data
+"""
 
 filtered = df[df["final_score"] >= min_score]
 filtered = filtered[filtered["tier"].isin(tier_filter)]
@@ -138,45 +174,45 @@ if diversity_only:
 filtered = filtered.sort_values("final_score", ascending=False)
 
 # -----------------------------
-# KPI SECTION (CONSTANT - FULL DATASET)
+# KPI SECTION
 # -----------------------------
+"""
+WHY:
+- Shows full dataset distribution (not filtered view)
+- Helps understand pipeline bias and tier spread
+"""
 
 st.divider()
 st.subheader("Dataset Overview")
 
 total = len(df)
 
-tier_a = df[df["tier"] == "A"]
-tier_b = df[df["tier"] == "B"]
-tier_c = df[df["tier"] == "C"]
-tier_below = df[df["tier"] == "Below"]
+col1, col2, col3, col4 = st.columns(4)
 
-col1, col2, col3, col4, col5 = st.columns(5)
-
-col1.metric("Total", f"{total}")
-
-col2.metric("Tier A", f"{len(tier_a)/total:.1%}")
-col3.metric("Tier B", f"{len(tier_b)/total:.1%}")
-col4.metric("Tier C", f"{len(tier_c)/total:.1%}")
-col5.metric("Below", f"{len(tier_below)/total:.1%}")
+col1.metric("Total Candidates", total)
+col2.metric("Tier A", len(df[df["tier"] == "A"]))
+col3.metric("Tier B", len(df[df["tier"] == "B"]))
+col4.metric("Tier C + Below", len(df[df["tier"].isin(["C", "Below"])]))
 
 # -----------------------------
-# TABLE
+# TABLE VIEW
 # -----------------------------
 
 st.subheader("Ranked Shortlist")
 
 st.markdown("""
-This table shows **filtered candidates only**, ranked by AI score.
-Higher scores indicate stronger fit based on:
-- Employer tier
-- Returnee signal
-- Experience fit
-- Education quality
+This table shows filtered candidates ranked by AI score.
+
+Signals used upstream:
+- Employer tier (IB / PE / Hedge Fund proxy)
+- Returnee signal (geographic + education heuristic)
+- Experience alignment
+- Education quality proxy
 """)
 
 display_cols = [
-    "candidate_id",
+    "id",
+    "full_name",
     "final_score",
     "tier",
     "is_female"
@@ -191,17 +227,17 @@ st.dataframe(
 )
 
 # -----------------------------
-# HISTOGRAM (FILTER-AWARE)
+# VISUALIZATION
 # -----------------------------
 
-st.subheader("Score Distribution (Filtered View)")
+st.subheader("Score Distribution")
 
 fig = px.histogram(
     filtered,
     x="final_score",
     color="tier",
     nbins=20,
-    barmode="overlay",
+    barmode="overlay"
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -217,5 +253,5 @@ st.download_button(
     csv,
     "shortlist.csv",
     "text/csv",
-    help="Downloads the currently filtered candidate shortlist including score, tier, and flags for offline analysis or reporting."
+    help="Exports current filtered dataset for offline analysis or recruiter use."
 )

@@ -238,6 +238,8 @@ st.plotly_chart(fig, use_container_width=True)
 # EXPORT
 # -----------------------------
 
+print(filtered.columns)
+
 export_df = filtered[
     [
         "full_name",

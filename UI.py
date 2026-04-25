@@ -149,7 +149,7 @@ if "tier" in filtered.columns:
 if "sex" in filtered.columns:
     filtered = filtered[filtered["sex"].isin(gender_filter)]
 
-filtered = filtered.sort_values("final_score", ascending=False)
+filtered = filtered.sort_values("total_score", ascending=False)
 
 # -----------------------------
 # KPI SECTION (PERCENTAGES)

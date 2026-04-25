@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datasets import load_dataset
 
 # -----------------------------
 # STREAMLIT CONFIG (MUST BE FIRST)
@@ -53,17 +54,25 @@ st.caption("AI-powered sourcing analytics for talent screening and ranking")
 
 @st.cache_data
 def load_data():
-    return pd.read_csv("scored_output.csv")
+    dataset = load_dataset(
+        "csv",
+        data_files="https://huggingface.co/datasets/Bhavna1998/candidates/resolve/main/scored_output.csv"
+    )
+
+    df = dataset["train"].to_pandas()
+    return df
+
 
 df = load_data()
 
 if df.empty:
-    st.error("scored_output.csv not found or empty.")
+    st.error("Dataset is empty or failed to load from Hugging Face.")
     st.stop()
 
 if "final_score" not in df.columns:
     st.error("Missing required column: final_score")
     st.stop()
+    
 
 # -----------------------------
 # TIERING

@@ -175,11 +175,19 @@ col4.metric("Below", f"{(tier_counts.get('Below',0)/total)*100:.1f}%")
 # -----------------------------
 st.subheader("Filtered Data")
 
-#display_cols = ["id", "full_name", "total_score", "tier", "sex"]
-#available_cols = [c for c in display_cols if c in filtered.columns]
+display_df = filtered.copy()
+
+# Fix nested columns (avoid [object Object])
+display_df["experience"] = display_df["experience"].apply(
+    lambda x: x[0]["company"] if isinstance(x, list) and len(x) > 0 else ""
+) if "experience" in display_df.columns else display_df.get("experience")
+
+display_df["education"] = display_df["education"].apply(
+    lambda x: x[0]["school"] if isinstance(x, list) and len(x) > 0 else ""
+) if "education" in display_df.columns else display_df.get("education")
 
 st.dataframe(
-    filtered,   #[available_cols],
+    display_df,
     use_container_width=True,
     height=500
 )

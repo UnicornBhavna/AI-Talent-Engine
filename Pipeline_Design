@@ -1,0 +1,158 @@
+# 📄 Pipeline Design Note — Candidate Intelligence System (Task 1A)
+
+## 1. APIs Used & Rationale
+
+The pipeline was originally designed to operate on real-world talent intelligence data from **People Data Labs (PDL)**, which provides structured enrichment across people, companies, education, and social profiles.
+
+### Original API (Intended: People Data Labs)
+Used for:
+- Candidate identity resolution
+- Job history enrichment
+- Education + skills extraction
+- Company metadata (industry, size, tier signals)
+
+**Mapping to mandate criteria:**
+- `current_company` → employer tier classification (IB / PE / hedge fund)
+- `education` → elite university + returnee signal detection
+- `location` → geography segmentation (Asia vs West)
+- `job_title` → role classification (analyst / associate / etc.)
+- `years_experience` → seniority proxy for scoring
+
+---
+
+### Fallback Attempt: Alternative APIs
+After exhausting People Data Labs credits, alternative enrichment APIs were tested for similar structured person-level data. However, these also had strict rate limits and credit constraints, preventing reliable large-scale usage.
+
+---
+
+### Final Approach: Synthetic Data Generation
+Due to API limitations, a **synthetic dataset generator (Faker-based)** was implemented.
+
+This dataset is designed to:
+- Mimic real-world investment banking / PE / hedge fund talent distributions
+- Preserve realistic correlations:
+  - Elite firms → higher scores and experience
+  - Elite universities → stronger candidate profiles
+  - Geography → returnee signal likelihood (Asia vs West)
+- Enable reproducible testing without API dependency
+
+> This ensures the system behaves like a real-world talent intelligence pipeline even without live external data access.
+
+---
+
+## 2. Filter Logic (Pre-Scoring)
+
+Before scoring, minimal filtering is applied to preserve data integrity while avoiding unnecessary data loss.
+
+### Records are excluded only if:
+- `full_name` is missing
+- `current_company` is missing
+- Record structure is invalid or corrupted
+- Both `education` and `experience` are completely null
+
+### Design rationale:
+Filtering is intentionally minimal because:
+- The scoring system is designed to be robust to missing information
+- Missing fields reduce confidence rather than exclude candidates
+- Prioritize coverage over strict pre-filtering
+
+---
+
+## 3. Handling Missing / Null Fields
+
+The system is designed to be fully defensive and fault-tolerant.
+
+### Default handling strategy:
+- Missing strings → `""`
+- Missing numeric values → `0`
+- Missing lists (`education`, `experience`) → `[]`
+- Missing employer/education → reduces score contribution instead of failing
+
+### Core principle:
+> Missing data reduces signal strength but never breaks the pipeline.
+
+This ensures stable performance across both synthetic and real-world API data.
+
+---
+
+## 4. Error Handling Strategy
+
+The pipeline is built for batch-scale resilience.
+
+### During scoring:
+- Each record is wrapped in `try/except`
+- Failed records are skipped safely
+- Pipeline continues without interruption
+
+### If real APIs were integrated:
+
+#### Rate limit errors (429):
+- Exponential backoff retry strategy
+- Batch-level throttling
+
+#### Partial API responses:
+- Missing fields defaulted safely
+- Scoring continues with reduced confidence
+
+#### Corrupt payloads:
+- Logged and excluded from final dataset
+
+---
+
+## 5. Synthetic Data Justification
+
+Due to external constraints:
+
+- People Data Labs credits were exhausted
+- Alternative APIs were also rate-limited
+- Real-world data extraction became inconsistent
+
+As a result, a synthetic dataset was created to:
+
+- Preserve realism in candidate distributions
+- Simulate financial services hiring patterns
+- Maintain statistical balance across tiers (A/B/C/Below)
+- Enable reproducible development and testing
+
+> The synthetic dataset acts as a realistic proxy for production-grade talent intelligence data.
+
+---
+
+## 6. Design Philosophy
+
+This system is built on the following principles:
+
+- Robustness over perfect data completeness
+- Explainability over black-box scoring
+- Fault tolerance over strict validation
+- Modular pipeline separation (data → scoring → UI)
+- Realistic simulation when real data is unavailable
+
+---
+
+## 7. Output Contract
+
+The final output is a **master enriched dataset**, which includes:
+
+### Original fields:
+- full_name, education, experience, location, etc.
+
+### Added fields:
+- `final_score` (0–100 composite score)
+- `employer_tier` (classification: A/B/C/Below logic)
+- `returnee_signal` (Asia linkage heuristic score)
+- `diversity_flag` (heuristic gender proxy)
+
+---
+
+## Outcome
+
+This design ensures a single dataset can power:
+- Streamlit analytics dashboard
+- Filtering and ranking UI
+- Exportable recruiter shortlist
+- Downstream experimentation and analysis
+
+---
+
+AI used for this Project include OpenAI ChatGPT and Anthropic Claude.

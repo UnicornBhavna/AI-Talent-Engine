@@ -1,18 +1,3 @@
-"""
-Analytics Dashboard
-
-Responsibilities:
-1. Load precomputed candidates.csv
-2. Apply tiering + filtering
-3. Provide interactive shortlist view
-4. Export results to CSV
-
-Design:
-- Stateless UI layer
-- No scoring logic (precomputed pipeline output)
-- Safe handling of missing/malformed data
-"""
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -22,13 +7,13 @@ import plotly.express as px
 # -----------------------------
 
 st.set_page_config(
-    page_title="Analytics Dashboard",
+    page_title="Candidate Intelligence Dashboard",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # -----------------------------
-# THEME (OPTIONAL UI UPGRADE)
+# THEME (CLEAN WHITE UI)
 # -----------------------------
 
 st.markdown("""
@@ -42,7 +27,7 @@ st.markdown("""
             background-color: white;
         }
 
-        html, body, [class*="css"]  {
+        html, body, [class*="css"] {
             background-color: white !important;
             color: black !important;
         }
@@ -60,7 +45,7 @@ st.markdown("""
 # -----------------------------
 
 st.title("Candidate Intelligence Dashboard")
-st.caption("AI-powered sourcing analytics for Global Investment & Strategic Research")
+st.caption("AI-powered sourcing analytics for talent screening and ranking")
 
 # -----------------------------
 # DATA LOADING
@@ -68,19 +53,20 @@ st.caption("AI-powered sourcing analytics for Global Investment & Strategic Rese
 
 @st.cache_data
 def load_data():
-    try:
-        return pd.read_csv("scored_output.csv")
-    except Exception:
-        return pd.DataFrame()
+    return pd.read_csv("scored_output.csv")
 
 df = load_data()
 
 if df.empty:
-    st.error("scored_output.csv not found or empty. Run pipeline first.")
+    st.error("scored_output.csv not found or empty.")
+    st.stop()
+
+if "final_score" not in df.columns:
+    st.error("Missing required column: final_score")
     st.stop()
 
 # -----------------------------
-# TIERING LOGIC
+# TIERING
 # -----------------------------
 
 def assign_tier(score):
@@ -92,51 +78,38 @@ def assign_tier(score):
         return "C"
     return "Below"
 
-if "final_score" not in df.columns:
-    st.error("Missing required column: final_score")
-    st.stop()
-
 df["tier"] = df["final_score"].apply(assign_tier)
 
 # -----------------------------
-# SAFE COLUMN HANDLING
+# SAFE FEMALE FLAG EXTRACTION
 # -----------------------------
 
-df["company_tier"] = df["employer"].apply(
-    lambda x: x.get("tier") if isinstance(x, dict) else None
-) if "employer" in df.columns else None
+def extract_female(x):
+    if isinstance(x, dict):
+        return x.get("is_female", False)
+    return False
 
-df["returnee_score"] = df["returnee_signal"].apply(
-    lambda x: x.get("score") if isinstance(x, dict) else 0
-) if "returnee_signal" in df.columns else 0
-
-df["is_female"] = df["diversity_flag"].apply(
-    lambda x: x.get("is_female") if isinstance(x, dict) else False
-) if "diversity_flag" in df.columns else False
+if "diversity_flag" in df.columns:
+    df["is_female"] = df["diversity_flag"].apply(extract_female)
+else:
+    df["is_female"] = False
 
 # -----------------------------
-# FILTERS
+# SIDEBAR CONTROLS
 # -----------------------------
 
-st.sidebar.header("Controls")
+st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
-**How to use:**
-- Filter and rank candidates from the AI scoring pipeline
-- Adjust thresholds to refine shortlist quality
+Use filters to refine candidate shortlist.
+All metrics above remain constant for dataset comparison.
 """)
 
-st.sidebar.markdown("""
-**Tier definitions:**
-- **A:** Top-tier (elite firms / strongest returnee + profile match)
-- **B:** Strong candidates (good firms + solid signals)
-- **C:** Moderate fit (mixed signals)
-- **Below:** Low relevance to mandate
-""")
-
-st.sidebar.markdown("**Minimum Score**: Filters out low-fit candidates based on AI composite scoring (0–100).")
-
-min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
+min_score = st.sidebar.slider(
+    "Minimum Score (0–100)",
+    0, 100, 50,
+    help="Filters out candidates below this AI composite score threshold."
+)
 
 tier_filter = st.sidebar.multiselect(
     "Tier Filter",
@@ -144,71 +117,93 @@ tier_filter = st.sidebar.multiselect(
     default=["A", "B", "C"]
 )
 
-diversity_only = st.sidebar.checkbox("Diversity Only (Female flagged)")
-
-st.sidebar.caption(
-    "When enabled, shows only candidates inferred as female using heuristic name-based signals (low confidence proxy)."
+diversity_only = st.sidebar.checkbox(
+    "Diversity Only (Female candidates)",
+    help="Filters candidates flagged as female using heuristic signal (low confidence)."
 )
 
 # -----------------------------
-# APPLY FILTERS
+# APPLY FILTERS (VIEW DATA ONLY)
 # -----------------------------
 
 filtered = df[df["final_score"] >= min_score]
 filtered = filtered[filtered["tier"].isin(tier_filter)]
 
-if diversity_only and "is_female" in df.columns:
+if diversity_only:
     filtered = filtered[filtered["is_female"] == True]
 
 filtered = filtered.sort_values("final_score", ascending=False)
 
 # -----------------------------
-# KPI METRICS
+# KPI SECTION (CONSTANT - FULL DATASET)
 # -----------------------------
 
 st.divider()
+st.subheader("Dataset Overview")
 
-col1, col2, col3, col4 = st.columns(4)
+total = len(df)
 
-col1.metric("Total Candidates", len(df))
-col2.metric("Tier A", len(df[df["tier"] == "A"]))
-col3.metric("Tier B", len(df[df["tier"] == "B"]))
-col4.metric("Filtered Output", len(filtered))
+tier_a = len(df[df["tier"] == "A"])
+tier_b = len(df[df["tier"] == "B"])
+tier_c = len(df[df["tier"] == "C"])
+tier_below = len(df[df["tier"] == "Below"])
+
+col1, col2, col3, col4, col5 = st.columns(5)
+
+col1.metric("Total", f"{total}", "All candidates")
+
+col2.metric("Tier A", f"{tier_a} ({tier_a/total:.1%})")
+col3.metric("Tier B", f"{tier_b} ({tier_b/total:.1%})")
+col4.metric("Tier C", f"{tier_c} ({tier_c/total:.1%})")
+col5.metric("Below", f"{tier_below} ({tier_below/total:.1%})")
 
 st.divider()
 
 # -----------------------------
-# TABLE OUTPUT
+# TABLE
 # -----------------------------
 
 st.subheader("Ranked Shortlist")
 
 st.markdown("""
-This table shows **AI-ranked candidates** based on:
-- Employer quality (investment banking / PE / hedge fund tiering)
-- Returnee signal strength (Asia linkage probability)
-- Experience alignment
-- Education quality proxy
-
-Sorted from highest to lowest overall score.
+This table shows **filtered candidates only**, ranked by AI score.
+Higher scores indicate stronger fit based on:
+- Employer tier
+- Returnee signal
+- Experience fit
+- Education quality
 """)
 
 display_cols = [
     "candidate_id",
     "final_score",
     "tier",
-    "returnee_score",
     "is_female"
 ]
 
 available_cols = [c for c in display_cols if c in filtered.columns]
 
-st.subheader("Score Distribution Overview")
+st.dataframe(
+    filtered[available_cols],
+    use_container_width=True,
+    height=500
+)
 
-st.markdown("""
-This histogram shows the distribution of candidate scores across the dataset.
-It helps identify how selective the pipeline is and where candidates cluster.
-""")
+# -----------------------------
+# HISTOGRAM (FILTER-AWARE)
+# -----------------------------
+
+st.subheader("Score Distribution (Filtered View)")
+
+fig = px.histogram(
+    filtered,
+    x="final_score",
+    color="tier",
+    nbins=20,
+    barmode="overlay",
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
 # EXPORT
@@ -217,25 +212,8 @@ It helps identify how selective the pipeline is and where candidates cluster.
 csv = filtered.to_csv(index=False).encode("utf-8")
 
 st.download_button(
-    "⬇ Download Shortlist CSV",
+    "⬇ Download Filtered Shortlist",
     csv,
     "shortlist.csv",
     "text/csv"
 )
-
-# -----------------------------
-# INSIGHT VISUALIZATION
-# -----------------------------
-
-st.subheader("Score Distribution")
-
-fig = px.histogram(
-    df,
-    x="final_score",
-    color="tier",
-    nbins=20,
-    barmode="overlay"
-)
-
-st.plotly_chart(fig, use_container_width=True)
-

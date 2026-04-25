@@ -253,17 +253,17 @@ def run_pipeline(input_path="candidates.csv", output_path="scored_output.csv"):
         score_rationale = f"{r.get('job_title')} at {r.get('current_company')} with {r.get('years_experience')} years experience. Strong profile based on employer pedigree and role alignment."
 
         final_record = {
-            "full_name": r.get("full_name"),
-            "current_title + employer": current_title_employer,
-            "current_location": location,
-            "employer_tier": enriched.get("employer_tier"),
-            "total_score": enriched.get("total_score"),
-            "score_breakdown": enriched.get("score_breakdown"),
-            "shortlist_tier": enriched.get("shortlist_tier"),
-            "diversity_flag": diversity_flag,
-            "linkedin_url": r.get("linkedin_url"),
-            "score_rationale": score_rationale
-        }
+    **r,  # ✅ keeps ALL original columns
+
+    # ✅ add new fields
+    "current_title + employer": current_title_employer,
+    "current_location": location,
+    "employer_tier": enriched.get("employer_tier"),
+    "total_score": enriched.get("total_score"),
+    "score_breakdown": enriched.get("score_breakdown"),
+    "shortlist_tier": enriched.get("shortlist_tier"),
+    "diversity_flag": diversity_flag,
+    "score_rationale": score_rationale}
 
         output.append(final_record)
 

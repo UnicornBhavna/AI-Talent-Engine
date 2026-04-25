@@ -2,3 +2,6 @@ requests
 pandas
 python-dotenv
 faker
+streamlit
+plotly
+matplotlib

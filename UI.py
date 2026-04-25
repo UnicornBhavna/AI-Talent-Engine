@@ -54,7 +54,7 @@ st.caption("AI-powered sourcing analytics for talent screening and ranking")
 
 @st.cache_data
 def load_data():
-    dataset = load_dataset("Bhavna1998/candidates", split="train")
+    dataset = load_dataset("Bhavna1998/scored_output", split="train")
     return dataset.to_pandas()
 
 df = load_data()

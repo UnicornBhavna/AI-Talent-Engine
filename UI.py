@@ -81,7 +81,7 @@ Sets the minimum AI score threshold; only candidates above this score appear in 
 
 min_score = st.sidebar.slider("Minimum Score", 0, 100, 0)
 
-st.sidebar.multiselect.markdown("""
+st.sidebar.markdown("""
 <div style="font-size:13px; font-style:italic; line-height:1.5">
 
 <b>Tier Definition (Based on AI Score)</b><br><br>
@@ -100,7 +100,7 @@ tier_filter = st.sidebar.multiselect(
     default=sorted(full_df["tier"].dropna().unique().tolist()) if "tier" in full_df.columns else []
 )
 
-st.sidebar.multiselect.markdown("""
+st.sidebar.markdown("""
 <div style="font-size:13px; font-style:italic; line-height:1.4">
 Filters candidates by gender for segmentation analysis; does not influence scoring or ranking.
 </div>

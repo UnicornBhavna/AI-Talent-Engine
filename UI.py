@@ -59,23 +59,8 @@ df = load_data()
 full_df = df.copy()
 
 # -----------------------------
-# SAFETY CHECKS
+# CLEANING (SAFE ONLY)
 # -----------------------------
-
-if full_df.empty:
-    st.error("Dataset is empty or failed to load.")
-    st.stop()
-
-if "final_score" not in full_df.columns:
-    st.error("Missing final_score column")
-    st.stop()
-
-full_df["final_score"] = pd.to_numeric(full_df["final_score"], errors="coerce").fillna(0)
-
-# -----------------------------
-# CLEAN ONLY (NO FEATURE CREATION)
-# -----------------------------
-
 if "tier" in full_df.columns:
     full_df["tier"] = full_df["tier"].astype(str).str.strip()
 
@@ -85,23 +70,20 @@ if "sex" in full_df.columns:
 # -----------------------------
 # SIDEBAR FILTERS
 # -----------------------------
-
 st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
 <div style="font-size:13px; font-style:italic; line-height:1.4">
-Adjusts shortlist and chart only. KPIs remain dataset-wide.
+Adjusts shortlist and charts only. Does NOT affect dataset-level KPIs.
 </div>
 """, unsafe_allow_html=True)
 
 min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
 
-VALID_TIERS = sorted(full_df["tier"].dropna().unique().tolist())
-
 tier_filter = st.sidebar.multiselect(
     "Tier Filter",
-    VALID_TIERS,
-    default=VALID_TIERS
+    sorted(full_df["tier"].dropna().unique().tolist()) if "tier" in full_df.columns else [],
+    default=sorted(full_df["tier"].dropna().unique().tolist()) if "tier" in full_df.columns else []
 )
 
 gender_filter = st.sidebar.multiselect(
@@ -113,10 +95,10 @@ gender_filter = st.sidebar.multiselect(
 # -----------------------------
 # APPLY FILTERS
 # -----------------------------
-
 filtered = full_df.copy()
 
-filtered = filtered[filtered["final_score"] >= min_score]
+if "final_score" in filtered.columns:
+    filtered = filtered[filtered["final_score"] >= min_score]
 
 if "tier" in filtered.columns:
     filtered = filtered[filtered["tier"].isin(tier_filter)]
@@ -127,27 +109,25 @@ if "sex" in filtered.columns:
 filtered = filtered.sort_values("final_score", ascending=False)
 
 # -----------------------------
-# KPI SECTION (FULL DATASET)
+# KPI SECTION (PERCENTAGES)
 # -----------------------------
-
 st.divider()
 st.subheader("Dataset Overview")
 
 total = len(full_df)
-tier_counts = full_df["tier"].value_counts()
+tier_counts = full_df["tier"].value_counts() if "tier" in full_df.columns else {}
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Total", total)
-col2.metric("Tier A", tier_counts.get("A", 0))
-col3.metric("Tier B", tier_counts.get("B", 0))
-col4.metric("Tier C + Below", tier_counts.get("C", 0) + tier_counts.get("Below", 0))
+col1.metric("Tier A", f"{(tier_counts.get('A',0)/total)*100:.1f}%")
+col2.metric("Tier B", f"{(tier_counts.get('B',0)/total)*100:.1f}%")
+col3.metric("Tier C", f"{(tier_counts.get('C',0)/total)*100:.1f}%")
+col4.metric("Below", f"{(tier_counts.get('Below',0)/total)*100:.1f}%")
 
 # -----------------------------
-# TABLE
+# TABLE (FILTERED)
 # -----------------------------
-
-st.subheader("Ranked Shortlist (Filtered)")
+st.subheader("Ranked Shortlist")
 
 display_cols = ["id", "full_name", "final_score", "tier", "sex"]
 available_cols = [c for c in display_cols if c in filtered.columns]
@@ -158,25 +138,105 @@ st.dataframe(
     height=500
 )
 
+st.subheader("Tier Distribution with Gender Overlay")
+
+import plotly.graph_objects as go
+
+plot_df = full_df.copy()
+
+# jitter so points don't overlap perfectly
+plot_df["jitter"] = plot_df["final_score"] + (plot_df["sex"].map({"M": -0.5, "F": 0.5}).fillna(0))
+
+fig = go.Figure()
+
+st.subheader("Tier Distribution + Gender Overlay (Dual Axis)")
+
+import plotly.graph_objects as go
+
+plot_df = full_df.copy()
+
 # -----------------------------
-# CHART
+# TIER COUNTS (HISTOGRAM DATA)
 # -----------------------------
+tier_counts = plot_df["tier"].value_counts().reset_index()
+tier_counts.columns = ["tier", "count"]
 
-st.subheader("Score Distribution (Tier + Gender)")
+# -----------------------------
+# GENDER COUNTS
+# -----------------------------
+gender_counts = plot_df["sex"].value_counts().reset_index()
+gender_counts.columns = ["sex", "count"]
 
-plot_df = filtered.copy()
+st.subheader("Score Distribution: Tier vs Gender (Dual Axis)")
 
-if "sex" in plot_df.columns:
-    plot_df["tier_gender"] = plot_df["tier"] + " | " + plot_df["sex"]
-else:
-    plot_df["tier_gender"] = plot_df["tier"]
+import numpy as np
+import plotly.graph_objects as go
 
-fig = px.histogram(
-    plot_df,
-    x="final_score",
-    color="tier_gender",
-    nbins=20,
-    barmode="overlay"
+plot_df = full_df.copy()
+
+# -----------------------------
+# CREATE SCORE BINS
+# -----------------------------
+bins = list(range(0, 101, 5))  # 0-100 in steps of 5
+plot_df["score_bin"] = pd.cut(plot_df["final_score"], bins=bins)
+
+bin_centers = [interval.mid for interval in plot_df["score_bin"].cat.categories]
+
+# -----------------------------
+# TIER COUNTS PER BIN (Y1)
+# -----------------------------
+tier_pivot = plot_df.groupby(["score_bin", "tier"]).size().unstack(fill_value=0)
+
+# -----------------------------
+# GENDER COUNTS PER BIN (Y2)
+# -----------------------------
+gender_pivot = plot_df.groupby(["score_bin", "sex"]).size().unstack(fill_value=0)
+
+# -----------------------------
+# FIGURE
+# -----------------------------
+fig = go.Figure()
+
+# --- Tier (Y1: bars stacked feel via multiple traces)
+for tier in ["A", "B", "C", "Below"]:
+    if tier in tier_pivot.columns:
+        fig.add_trace(go.Bar(
+            x=bin_centers,
+            y=tier_pivot[tier],
+            name=f"Tier {tier}",
+            opacity=0.7
+        ))
+
+# --- Gender (Y2: line plot)
+for gender in ["M", "F"]:
+    if gender in gender_pivot.columns:
+        fig.add_trace(go.Scatter(
+            x=bin_centers,
+            y=gender_pivot[gender],
+            name=f"Gender {gender}",
+            mode="lines+markers",
+            yaxis="y2"
+        ))
+
+# -----------------------------
+# LAYOUT (DUAL AXIS)
+# -----------------------------
+fig.update_layout(
+    barmode="stack",
+    xaxis=dict(title="Score (Binned)"),
+
+    yaxis=dict(
+        title="Tier Count"
+    ),
+
+    yaxis2=dict(
+        title="Gender Count",
+        overlaying="y",
+        side="right"
+    ),
+
+    legend=dict(title="Legend"),
+    height=550
 )
 
 st.plotly_chart(fig, use_container_width=True)
@@ -184,11 +244,10 @@ st.plotly_chart(fig, use_container_width=True)
 # -----------------------------
 # EXPORT
 # -----------------------------
-
 st.download_button(
     "⬇ Download Filtered Shortlist",
     filtered.to_csv(index=False).encode("utf-8"),
     "shortlist.csv",
     "text/csv",
-    help="Exports exactly what is shown in the filtered view."
+    help="Exports exactly what is shown in filtered view"
 )

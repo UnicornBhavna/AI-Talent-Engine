@@ -88,7 +88,7 @@ def detect_returnee_signal(record: Dict[str, Any]):
 
 
 # -----------------------------
-# DIVERSITY FLAG (HEURISTIC ONLY)
+# DIVERSITY FLAG
 # -----------------------------
 
 def detect_diversity_flag(record: Dict[str, Any]):
@@ -105,7 +105,7 @@ def detect_diversity_flag(record: Dict[str, Any]):
 
 
 # -----------------------------
-# SCORING ENGINE
+# SCORING ENGINE (FINAL)
 # -----------------------------
 
 def score_candidate(record: Dict[str, Any]):
@@ -115,6 +115,7 @@ def score_candidate(record: Dict[str, Any]):
 
     score = 0
 
+    # employer score
     if employer["tier"] == "tier_1_ib":
         score += 45
     elif employer["tier"] == "pe_hedge_top":
@@ -124,8 +125,10 @@ def score_candidate(record: Dict[str, Any]):
     else:
         score += 10
 
+    # returnee signal
     score += min(returnee["score"] * 3, 30)
 
+    # experience
     exp = record.get("years_experience") or 0
 
     if 2 <= exp <= 6:
@@ -135,6 +138,7 @@ def score_candidate(record: Dict[str, Any]):
     else:
         score += 15
 
+    # education
     edu_blob = normalize(record.get("education"))
 
     elite = {"nus", "ntu", "oxford", "cambridge", "harvard", "stanford"}
@@ -144,8 +148,23 @@ def score_candidate(record: Dict[str, Any]):
     else:
         score += 5
 
+    final_score = min(score, 100)
+
+    # -----------------------------
+    # TIER (NOW PART OF PIPELINE)
+    # -----------------------------
+    if final_score >= 65:
+        tier = "A"
+    elif final_score >= 50:
+        tier = "B"
+    elif final_score >= 35:
+        tier = "C"
+    else:
+        tier = "Below"
+
     return {
-        "final_score": min(score, 100),
+        "final_score": final_score,
+        "tier": tier,
         "employer_tier": employer["tier"],
         "employer_match": employer["matched"],
         "returnee_score": returnee["score"],
@@ -155,16 +174,14 @@ def score_candidate(record: Dict[str, Any]):
 
 
 # -----------------------------
-# LOAD + FIX CSV (IMPORTANT)
+# PIPELINE
 # -----------------------------
 
 def load_input(path: str):
     df = pd.read_csv(path)
-
     records = df.to_dict(orient="records")
 
     for r in records:
-        # FIX: nested fields stored as strings in CSV
         if isinstance(r.get("experience"), str):
             try:
                 r["experience"] = ast.literal_eval(r["experience"])
@@ -180,40 +197,23 @@ def load_input(path: str):
     return records
 
 
-# -----------------------------
-# PIPELINE
-# -----------------------------
-
 def run_pipeline(input_path="candidates.csv", output_path="scored_output.csv"):
-
     records = load_input(input_path)
-
-    print(f"Loaded records: {len(records)}")
 
     output = []
 
     for i, r in enumerate(records):
         try:
             scored = score_candidate(r)
-            merged = {**r, **scored}
-            output.append(merged)
-
+            output.append({**r, **scored})
         except Exception as e:
             print(f"Row {i} failed: {e}")
-            continue
 
     df = pd.DataFrame(output)
-
-    print(f"Successfully processed: {len(df)} rows")
-
     df.to_csv(output_path, index=False)
 
     print(f"Saved → {output_path}")
 
-
-# -----------------------------
-# ENTRY
-# -----------------------------
 
 if __name__ == "__main__":
     run_pipeline()

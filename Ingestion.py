@@ -173,11 +173,14 @@ def save_csv(data: list):
 # MAIN
 # -----------------------------
 
+@st.cache_data
 def main():
     print("Starting ingestion pipeline...")
 
   #  records = fetch_all()
-    df = pd.read_csv("candidates.csv")
+    
+    dataset = load_dataset("Bhavna1998/candidates", split="train")
+    df = dataset.to_pandas()
     records = df.to_dict(orient="records")
 
     print(f"Fetched: {len(records)} records")

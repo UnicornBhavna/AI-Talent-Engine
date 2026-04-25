@@ -54,10 +54,8 @@ st.caption("AI-powered candidate ranking system for sourcing and screening")
 def load_data():
     dataset = load_dataset("Bhavna1998/scored_output", split="train")
     return dataset.to_pandas()
-    #return pd.read_csv("scored_output.csv")
 
 df = load_data()
-full_df = df.copy()
 
 # -----------------------------
 # SAFETY CHECKS
@@ -68,13 +66,6 @@ if df.empty:
     st.stop()
 
 df["final_score"] = pd.to_numeric(df["final_score"], errors="coerce").fillna(0)
-
-# -----------------------------
-# FIX: NORMALIZE GENDER COLUMN (IMPORTANT)
-# -----------------------------
-
-if "sex" in df.columns:
-    df["sex"] = df["sex"].astype(str).str.strip().str.upper()
 
 # -----------------------------
 # TIERING LOGIC
@@ -91,6 +82,13 @@ def assign_tier(score):
 
 df["tier"] = df["final_score"].apply(assign_tier)
 
+# IMPORTANT: clean + normalize gender
+if "sex" in df.columns:
+    df["sex"] = df["sex"].astype(str).str.upper().str.strip()
+    df.loc[~df["sex"].isin(["M", "F"]), "sex"] = "U"
+
+full_df = df.copy()
+
 # -----------------------------
 # SIDEBAR FILTERS
 # -----------------------------
@@ -98,34 +96,18 @@ df["tier"] = df["final_score"].apply(assign_tier)
 st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
-<div style="font-size:13px; line-height:1.4; font-style:italic">
-Adjusts which candidates appear in the shortlist and chart based on score threshold and tier selection, without affecting overall dataset metrics.
+<div style="font-size:13px; font-style:italic; line-height:1.4">
+Adjusts shortlist and chart view only. Does NOT change dataset-level KPIs.
 </div>
 """, unsafe_allow_html=True)
 
 min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
-
-st.sidebar.markdown("""
-<div style="font-size:13px; line-height:1.4; font-style:italic">
-<b>Score Bands</b><br><br>
-• <b>Tier A</b> → top ~35% scores (high-confidence, strongest profiles)<br>
-• <b>Tier B</b> → next strong cohort (competitive but not elite)<br>
-• <b>Tier C</b> → mid-range candidates with mixed signals<br>
-• <b>Below</b> → low-fit or weak signal profiles<br>
-</div>
-""", unsafe_allow_html=True)
 
 tier_filter = st.sidebar.multiselect(
     "Tier Filter",
     ["A", "B", "C", "Below"],
     default=["A", "B", "C"]
 )
-
-st.sidebar.markdown("""
-<div style="font-size:13px; line-height:1.4; font-style:italic">
-Filters candidates by gender field present in the dataset (used only for segmentation, not scoring).
-</div>
-""", unsafe_allow_html=True)
 
 gender_filter = st.sidebar.multiselect(
     "Gender Filter",
@@ -134,13 +116,15 @@ gender_filter = st.sidebar.multiselect(
 )
 
 # -----------------------------
-# APPLY FILTERS (SINGLE SOURCE OF TRUTH)
+# APPLY FILTERS (SOURCE OF TRUTH)
 # -----------------------------
 
 filtered = full_df.copy()
 
-filtered = filtered[filtered["final_score"] >= min_score]
-filtered = filtered[filtered["tier"].isin(tier_filter)]
+filtered = filtered[
+    (filtered["final_score"] >= min_score) &
+    (filtered["tier"].isin(tier_filter))
+]
 
 if "sex" in filtered.columns:
     filtered = filtered[filtered["sex"].isin(gender_filter)]
@@ -154,8 +138,8 @@ filtered = filtered.sort_values("final_score", ascending=False)
 st.divider()
 st.subheader("Dataset Overview")
 
-total = len(df)
-tier_counts = df["tier"].value_counts()
+total = len(full_df)
+tier_counts = full_df["tier"].value_counts()
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -185,13 +169,15 @@ st.dataframe(
 
 st.subheader("Score Distribution (Tier + Gender)")
 
-if "sex" in filtered.columns:
-    filtered["tier_gender"] = filtered["tier"] + " | " + filtered["sex"]
+plot_df = filtered.copy()
+
+if "sex" in plot_df.columns:
+    plot_df["tier_gender"] = plot_df["tier"] + " | " + plot_df["sex"]
 else:
-    filtered["tier_gender"] = filtered["tier"]
+    plot_df["tier_gender"] = plot_df["tier"]
 
 fig = px.histogram(
-    filtered,
+    plot_df,
     x="final_score",
     color="tier_gender",
     nbins=20,
@@ -209,7 +195,7 @@ fig = px.histogram(
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# EXPORT (FILTERED DATA ONLY)
+# EXPORT (FILTERED ONLY)
 # -----------------------------
 
 st.download_button(
@@ -217,5 +203,5 @@ st.download_button(
     filtered.to_csv(index=False).encode("utf-8"),
     "shortlist.csv",
     "text/csv",
-    help="Exports exactly what is shown in the filtered table and chart."
+    help="Exports exactly what is shown in the filtered view."
 )

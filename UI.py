@@ -51,7 +51,9 @@ st.caption("AI-powered candidate ranking system for sourcing and screening")
 
 @st.cache_data
 def load_data():
-    return pd.read_csv("scored_output.csv")
+    dataset = load_dataset("Bhavna1998/scored_output", split="train")
+    return dataset.to_pandas()
+    #return pd.read_csv("scored_output.csv")
 
 df = load_data()
 

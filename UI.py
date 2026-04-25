@@ -56,19 +56,24 @@ def load_data():
     return dataset.to_pandas()
 
 df = load_data()
+full_df = df.copy()
 
 # -----------------------------
 # SAFETY CHECKS
 # -----------------------------
 
-if df.empty:
+if full_df.empty:
     st.error("Dataset is empty or failed to load.")
     st.stop()
 
-full_df = df.copy()
+if "final_score" not in full_df.columns:
+    st.error("Missing final_score column")
+    st.stop()
+
+full_df["final_score"] = pd.to_numeric(full_df["final_score"], errors="coerce").fillna(0)
 
 # -----------------------------
-# CLEAN ONLY (NO NEW FEATURES)
+# CLEAN ONLY (NO FEATURE CREATION)
 # -----------------------------
 
 if "tier" in full_df.columns:
@@ -85,13 +90,12 @@ st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
 <div style="font-size:13px; font-style:italic; line-height:1.4">
-Adjusts shortlist and chart view only. Does NOT change dataset-level KPIs.
+Adjusts shortlist and chart only. KPIs remain dataset-wide.
 </div>
 """, unsafe_allow_html=True)
 
 min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
 
-# dynamic tiers from dataset (IMPORTANT FIX)
 VALID_TIERS = sorted(full_df["tier"].dropna().unique().tolist())
 
 tier_filter = st.sidebar.multiselect(
@@ -107,7 +111,7 @@ gender_filter = st.sidebar.multiselect(
 )
 
 # -----------------------------
-# APPLY FILTERS (SAFE)
+# APPLY FILTERS
 # -----------------------------
 
 filtered = full_df.copy()

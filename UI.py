@@ -172,66 +172,46 @@ st.subheader("Filtered Data Visualisation")
 
 plot_df = filtered.copy()
 
-# jitter so points don't overlap perfectly
-plot_df["jitter"] = plot_df["final_score"] + (plot_df["sex"].map({"M": -0.5, "F": 0.5}).fillna(0))
-
-tier_counts = plot_df["tier"].value_counts().reset_index()
-tier_counts.columns = ["tier", "count"]
-
-# GENDER COUNTS
-gender_counts = plot_df["sex"].value_counts().reset_index()
-gender_counts.columns = ["sex", "count"]
-
 # CREATE SCORE BINS
 bins = list(range(0, 101, 10))
+plot_df["score_bin"] = pd.cut(plot_df["final_score"], bins=bins, include_lowest=True)
 
-plot_df["score_bin"] = pd.cut(
-    plot_df["final_score"],
-    bins=bins,
-    include_lowest=True
-)
+# bin labels (x-axis)
+bin_labels = [f"{i}-{i+10}" for i in range(0, 100, 10)]
 
-# TIER COUNTS PER BIN (Y1)
-tier_pivot = plot_df.groupby(["score_bin", "tier"]).size().unstack(fill_value=0)
+# PIVOT TABLES
+tier_pivot = pd.crosstab(plot_df["score_bin"], plot_df["tier"]).reindex(columns=["A", "B", "C", "Below"], fill_value=0)
+gender_pivot = pd.crosstab(plot_df["score_bin"], plot_df["sex"]).reindex(columns=["M", "F"], fill_value=0)
 
-# GENDER COUNTS PER BIN (Y2)
-gender_pivot = plot_df.groupby(["score_bin", "sex"]).size().unstack(fill_value=0)
+# X axis
+x_vals = tier_pivot.index.astype(str)
 
 # FIGURE
-fig = px.histogram(
-    plot_df,
-    x="final_score",
-    color="tier",
-    nbins=10
-)
+fig = go.Figure()
 
-fig.update_xaxes(range=[0, 100])
-
-# --- Tier (Y1: bars stacked feel via multiple traces)
+# TIER (Y1 - STACKED BARS)
 for tier in ["A", "B", "C", "Below"]:
-    if tier in tier_pivot.columns:
-        fig.add_trace(go.Bar(
-            x=bin_centers,
-            y=tier_pivot[tier],
-            name=f"Tier {tier}",
-            opacity=0.7
-        ))
+    fig.add_trace(go.Bar(
+        x=x_vals,
+        y=tier_pivot[tier],
+        name=f"Tier {tier}"
+    ))
 
-# --- Gender (Y2: line plot)
+# GENDER (Y2 - LINES)
 for gender in ["M", "F"]:
-    if gender in gender_pivot.columns:
-        fig.add_trace(go.Scatter(
-            x=bin_centers,
-            y=gender_pivot[gender],
-            name=f"Gender {gender}",
-            mode="lines+markers",
-            yaxis="y2"
-        ))
+    fig.add_trace(go.Scatter(
+        x=x_vals,
+        y=gender_pivot[gender],
+        name=f"Gender {gender}",
+        mode="lines+markers",
+        yaxis="y2"
+    ))
 
 # LAYOUT (DUAL AXIS)
 fig.update_layout(
     barmode="stack",
-    xaxis=dict(title="Score (Binned)"),
+
+    xaxis=dict(title="Score Bins"),
 
     yaxis=dict(
         title="Tier Count"
@@ -244,7 +224,7 @@ fig.update_layout(
     ),
 
     legend=dict(title="Legend"),
-    height=700
+    height=650
 )
 
 st.plotly_chart(fig, use_container_width=True)

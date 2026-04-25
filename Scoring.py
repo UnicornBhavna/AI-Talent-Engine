@@ -2,197 +2,306 @@ from typing import Dict, Any
 import re
 import pandas as pd
 import ast
+import difflib
 
 # -----------------------------
-# UTILITIES
+# NORMALIZATION
 # -----------------------------
-
 def normalize(text: str) -> str:
-    if not text:
-        return ""
-    return re.sub(r"[^a-z0-9 ]", "", str(text).lower()).strip()
+    return re.sub(r"[^a-z0-9 ]", "", str(text).lower()) if text else ""
+
+
+# -----------------------------
+# CONFIG: WEIGHTS
+# -----------------------------
+WEIGHTS = {
+    "employer_pedigree": 40,
+    "role_relevance": 15,
+    "tenure_fit": 20,
+    "returnee_signal": 25
+}
+# total = 100
+
+
+# -----------------------------
+# EMPLOYER TIERS
+# -----------------------------
+EMPLOYER_TIERS = {
+    "BB_IB": [
+        "Goldman Sachs", "Morgan Stanley", "JPMorgan",
+        "Bank of America", "UBS", "Barclays", "Deutsche Bank"
+    ],
+    "BUYSIDE": [
+        "Blackstone", "KKR", "Carlyle", "Apollo", "BlackRock"
+    ],
+    "MBB": [
+        "McKinsey", "BCG", "Bain"
+    ]
+}
+
+ALL_COMPANIES = sum(EMPLOYER_TIERS.values(), [])
 
 
 # -----------------------------
 # EMPLOYER CLASSIFICATION
 # -----------------------------
+def classify_employer(company_name: str) -> dict:
+    """
+    Uses fuzzy matching to map company to known tier.
 
-EMPLOYER_TIERS = {
-    "tier_1_ib": [
-        "goldman sachs", "morgan stanley", "jpmorgan", "jp morgan", "bank of america",
-        "ubs", "barclays", "deutsche bank"
-    ],
-    "tier_2_ib": [
-        "blackrock", "fidelity investments", "wellington", "schroders",
-        "hsbc", "standard chartered", "nomura", "mizuho", "rbc",
-        "bofa", "citi", "t. rowe price"
-    ],
-    "pe_hedge_top": [
-        "blackstone", "kkr", "carlyle", "apollo", "brookfield",
-        "bridgewater", "renaissance technologies", "bcg", "bain"
-    ]
-}
+    WHY:
+    Real data has inconsistent naming (e.g., "Goldman", "GS").
+    Fuzzy matching improves recall vs exact match.
+
+    LIMITATIONS:
+    - String similarity ≠ semantic understanding
+    - Short aliases (GS) may fail
+    """
+
+    matches = difflib.get_close_matches(company_name, ALL_COMPANIES, n=1, cutoff=0.6)
+
+    if matches:
+        matched = matches[0]
+        for tier, companies in EMPLOYER_TIERS.items():
+            if matched in companies:
+                return {"tier": tier, "confidence": 0.9, "matched_name": matched}
+
+    return {"tier": "OTHER", "confidence": 0.5, "matched_name": company_name}
 
 
-def classify_employer(company_name: str):
-    name = normalize(company_name)
+# -----------------------------
+# ROLE RELEVANCE
+# -----------------------------
+def score_role_relevance(title: str) -> int:
+    """
+    Scores how relevant the role is to target hiring funnel.
 
-    for c in EMPLOYER_TIERS["tier_1_ib"]:
-        if normalize(c) in name:
-            return {"tier": "tier_1_ib", "matched": c}
+    LOGIC:
+    - Strong match (IB, PE, Research) → full score
+    - Generic 'Analyst' → partial (ambiguous)
+    - Irrelevant → low
 
-    for c in EMPLOYER_TIERS["tier_2_ib"]:
-        if normalize(c) in name:
-            return {"tier": "tier_2_ib", "matched": c}
+    WHY:
+    Titles are often vague; we penalize ambiguity.
 
-    for c in EMPLOYER_TIERS["pe_hedge_top"]:
-        if normalize(c) in name:
-            return {"tier": "pe_hedge_top", "matched": c}
+    RETURNS: score out of WEIGHTS['role_relevance']
+    """
 
-    return {"tier": "other", "matched": None}
+    t = normalize(title)
+
+    if any(k in t for k in ["investment banking", "private equity", "research"]):
+        return WEIGHTS["role_relevance"]
+
+    if "analyst" in t:
+        return int(WEIGHTS["role_relevance"] * 0.6)
+
+    return int(WEIGHTS["role_relevance"] * 0.3)
+
+
+# -----------------------------
+# TENURE FIT
+# -----------------------------
+def score_tenure(exp: int) -> int:
+    """
+    Ideal window: 2–4 years.
+
+    LOGIC:
+    - 2–4 → full score
+    - 1–2 or 4–6 → moderate
+    - <1 or >6 → penalized
+
+    WHY:
+    This matches typical IB/PE hiring bands.
+
+    RETURNS: score out of WEIGHTS['tenure_fit']
+    """
+
+    if 2 <= exp <= 4:
+        return WEIGHTS["tenure_fit"]
+    elif 1 <= exp < 2 or 4 < exp <= 6:
+        return int(WEIGHTS["tenure_fit"] * 0.6)
+    else:
+        return int(WEIGHTS["tenure_fit"] * 0.3)
 
 
 # -----------------------------
 # RETURN SIGNAL
 # -----------------------------
+ASIA = {"singapore", "hong kong", "india", "china", "japan"}
 
-ASIA_KEYWORDS = {
-    "singapore", "hong kong", "shanghai", "beijing", "mumbai",
-    "bengaluru", "jakarta", "kuala lumpur", "seoul", "tokyo", "india",
-    "china", "taiwan", "malaysia", "thailand", "indonesia"
-}
+def detect_returnee_signal(record: Dict[str, Any]) -> dict:
+    """
+    Estimates 'returnee likelihood' using proxies.
 
-ASIAN_UNIVERSITIES = {
-    "nus", "ntu", "tsinghua", "peking university",
-    "university of hong kong", "hku",
-    "oxford", "cambridge", "harvard", "stanford"
-}
+    SIGNALS:
+    - Asia education
+    - Asia work experience
+    - Asia location history
+    - Name-origin heuristic (very weak)
 
+    WHY:
+    Nationality is unavailable → proxies approximate signal.
 
-def detect_returnee_signal(record: Dict[str, Any]):
-    text = normalize(str(record))
+    LIMITATIONS:
+    - Highly noisy and biased
+    - Name inference unreliable
+    - Education ≠ intent to return
+
+    RETURNS:
+        {
+            score: int,
+            signals_found: list
+        }
+    """
+
     score = 0
+    signals = []
 
-    for kw in ASIA_KEYWORDS:
-        if kw in text:
-            score += 2
+    # education
+    for edu in record.get("education", []):
+        if any(a in normalize(edu.get("school")) for a in ASIA):
+            score += 8
+            signals.append("asia_education")
 
-    education = record.get("education") or []
-    for edu in education:
-        edu_text = normalize(str(edu))
-        for uni in ASIAN_UNIVERSITIES:
-            if uni in edu_text:
-                score += 3
+    # experience
+    for exp in record.get("experience", []):
+        if normalize(exp.get("country")) in ASIA:
+            score += 8
+            signals.append("asia_experience")
 
-    return {"score": min(score, 10)}
+    # location
+    for c in record.get("all_countries", []):
+        if normalize(c) in ASIA:
+            score += 5
+            signals.append("asia_location")
 
-
-# -----------------------------
-# DIVERSITY FLAG
-# -----------------------------
-
-def detect_diversity_flag(record: Dict[str, Any]):
-    name = record.get("full_name") or ""
-    first = str(name).split(" ")[0].lower()
-
-    vowel_endings = {"a", "e", "i", "y"}
-    score = sum(first.endswith(v) for v in vowel_endings)
+    # name proxy
+    if any(x in normalize(record.get("full_name")) for x in ["singh", "li", "chen"]):
+        score += 4
+        signals.append("name_proxy")
 
     return {
-        "is_female": score > 0 and len(first) > 3,
-        "confidence": "low" if score == 0 else "medium"
+        "score": min(score, WEIGHTS["returnee_signal"]),
+        "signals_found": signals
     }
 
 
 # -----------------------------
-# SCORING ENGINE (FINAL)
+# DIVERSITY FLAG (SEPARATE)
 # -----------------------------
+def detect_diversity_flag(record: Dict[str, Any]) -> dict:
+    """
+    Infers gender using first-name heuristic.
 
-def score_candidate(record: Dict[str, Any]):
+    METHOD:
+    - Uses simple suffix heuristic
+
+    WHY:
+    No structured gender field available.
+
+    IMPORTANT:
+    - NOT used in scoring
+    - Only for reporting
+
+    LIMITATIONS:
+    - Inaccurate globally
+    - Misses non-binary identities
+    - Cultural bias
+
+    RETURNS:
+        {
+            is_female: bool,
+            confidence: str
+        }
+    """
+
+    name = record.get("full_name", "")
+    first = name.split(" ")[0].lower()
+
+    is_female = first.endswith(("a", "e", "i"))
+    confidence = "medium" if is_female else "low"
+
+    return {"is_female": is_female, "confidence": confidence}
+
+
+# -----------------------------
+# FINAL SCORING
+# -----------------------------
+def score_candidate(record: Dict[str, Any]) -> dict:
+    """
+    Combines all dimensions into final score.
+
+    Dimensions:
+    - Employer pedigree (40)
+    - Role relevance (15)
+    - Tenure fit (20)
+    - Returnee signal (25)
+
+    Diversity is NOT included in score.
+    """
+
     employer = classify_employer(record.get("current_company"))
     returnee = detect_returnee_signal(record)
     diversity = detect_diversity_flag(record)
 
-    score = 0
-
-    # employer score
-    if employer["tier"] == "tier_1_ib":
-        score += 45
-    elif employer["tier"] == "pe_hedge_top":
-        score += 35
-    elif employer["tier"] == "tier_2_ib":
-        score += 25
+    # employer scoring
+    if employer["tier"] == "BB_IB":
+        employer_score = WEIGHTS["employer_pedigree"]
+    elif employer["tier"] == "BUYSIDE":
+        employer_score = int(WEIGHTS["employer_pedigree"] * 0.9)
+    elif employer["tier"] == "MBB":
+        employer_score = int(WEIGHTS["employer_pedigree"] * 0.8)
     else:
-        score += 10
+        employer_score = int(WEIGHTS["employer_pedigree"] * 0.4)
 
-    # returnee signal
-    score += min(returnee["score"] * 3, 30)
+    role_score = score_role_relevance(record.get("job_title", ""))
+    tenure_score = score_tenure(record.get("years_experience", 0))
+    returnee_score = returnee["score"]
 
-    # experience
-    exp = record.get("years_experience") or 0
+    total = employer_score + role_score + tenure_score + returnee_score
 
-    if 2 <= exp <= 6:
-        score += 20
-    elif exp < 2:
-        score += 10
-    else:
-        score += 15
-
-    # education
-    edu_blob = normalize(record.get("education"))
-
-    elite = {"nus", "ntu", "oxford", "cambridge", "harvard", "stanford"}
-
-    if any(e in edu_blob for e in elite):
-        score += 10
-    else:
-        score += 5
-
-    final_score = min(score, 100)
-
-    # -----------------------------
-    # TIER (NOW PART OF PIPELINE)
-    # -----------------------------
-    if final_score >= 75:
+    if total >= 75:
         tier = "A"
-    elif final_score >= 60:
+    elif total >= 55:
         tier = "B"
-    elif final_score >= 50:
+    elif total >= 40:
         tier = "C"
     else:
         tier = "Below"
 
     return {
-        "final_score": final_score,
-        "tier": tier,
+        "total_score": total,
+        "shortlist_tier": tier,
+
+        "score_breakdown": {
+            "employer_pedigree": employer_score,
+            "role_relevance": role_score,
+            "tenure_fit": tenure_score,
+            "returnee_signal": returnee_score
+        },
+
         "employer_tier": employer["tier"],
-        "employer_match": employer["matched"],
-        "returnee_score": returnee["score"],
-        "is_female": diversity["is_female"],
-        "gender_confidence": diversity["confidence"]
+        "employer_match": employer["matched_name"],
+
+        "returnee_signals": returnee["signals_found"],
+
+        # separate field (NOT in score)
+        "diversity_flag": diversity
     }
 
 
 # -----------------------------
 # PIPELINE
 # -----------------------------
-
 def load_input(path: str):
     df = pd.read_csv(path)
     records = df.to_dict(orient="records")
 
     for r in records:
         if isinstance(r.get("experience"), str):
-            try:
-                r["experience"] = ast.literal_eval(r["experience"])
-            except:
-                r["experience"] = []
-
+            r["experience"] = ast.literal_eval(r["experience"])
         if isinstance(r.get("education"), str):
-            try:
-                r["education"] = ast.literal_eval(r["education"])
-            except:
-                r["education"] = []
+            r["education"] = ast.literal_eval(r["education"])
 
     return records
 
@@ -201,17 +310,11 @@ def run_pipeline(input_path="candidates.csv", output_path="scored_output.csv"):
     records = load_input(input_path)
 
     output = []
+    for r in records:
+        enriched = score_candidate(r)
+        output.append({**r, **enriched})
 
-    for i, r in enumerate(records):
-        try:
-            scored = score_candidate(r)
-            output.append({**r, **scored})
-        except Exception as e:
-            print(f"Row {i} failed: {e}")
-
-    df = pd.DataFrame(output)
-    df.to_csv(output_path, index=False)
-
+    pd.DataFrame(output).to_csv(output_path, index=False)
     print(f"Saved → {output_path}")
 
 

@@ -8,134 +8,180 @@ fake = Faker()
 # -----------------------------
 # CONFIG
 # -----------------------------
-
 TOTAL = int(input("Enter total records: "))
 
 # -----------------------------
-# CORE POOLS
+# TARGET LOCATIONS (MANDATORY)
 # -----------------------------
+ALLOWED_LOCATIONS = ["USA", "UK", "Australia", "Hong Kong"]
 
-COMPANIES = [
-    ("Goldman Sachs", "Investment Banking", "USA"),
-    ("Morgan Stanley", "Investment Banking", "USA"),
-    ("JPMorgan", "Investment Banking", "USA"),
-    ("BlackRock", "Asset Management", "USA"),
-    ("HSBC", "Banking", "UK"),
-    ("Barclays", "Banking", "UK"),
-    ("UBS", "Wealth Management", "Switzerland"),
-    ("Deutsche Bank", "Banking", "Germany"),
-    ("Blackstone", "Private Equity", "USA"),
-    ("KKR", "Private Equity", "USA"),
-    ("Carlyle", "Private Equity", "USA"),
-    ("Bain", "Consulting", "USA"),
+CITIES = {
+    "USA": ["New York"],
+    "UK": ["London"],
+    "Australia": ["Sydney", "Melbourne"],
+    "Hong Kong": ["Hong Kong"]
+}
+
+# -----------------------------
+# TRACK-SPECIFIC EMPLOYERS
+# -----------------------------
+IB_COMPANIES = [
+    "Goldman Sachs", "Morgan Stanley", "JPMorgan",
+    "Bank of America", "Barclays", "Deutsche Bank", "UBS"
 ]
 
-UNIVERSITIES = [
-    ("Harvard University", "USA", "University"),
-    ("Stanford University", "USA", "University"),
-    ("Oxford University", "UK", "University"),
-    ("Cambridge University", "UK", "University"),
-    ("National University of Singapore", "Singapore", "University"),
-    ("Nanyang Technological University", "Singapore", "University"),
+BUYSIDE_COMPANIES = [
+    "BlackRock", "Fidelity", "Wellington", "Schroders", "T. Rowe Price"
 ]
 
-COUNTRIES = ["USA", "UK", "Singapore", "Germany", "Switzerland", "Canada"]
-
-ROLES = [
-    "Investment Banking Analyst",
-    "Equity Research Analyst",
-    "Private Equity Associate",
-    "Hedge Fund Analyst"
+MBB_COMPANIES = [
+    "McKinsey", "BCG", "Bain"
 ]
 
-JOB_LEVELS = ["Analyst", "Associate", "Senior Associate", "VP"]
+ALL_COMPANIES = IB_COMPANIES + BUYSIDE_COMPANIES + MBB_COMPANIES
+
+# -----------------------------
+# ROLES
+# -----------------------------
+IB_ROLES = [
+    "Investment Banking Analyst", "M&A Analyst",
+    "Capital Markets Analyst", "Leveraged Finance Analyst"
+]
+
+BUYSIDE_ROLES = [
+    "Investment Analyst", "Research Analyst"
+]
+
+MBB_ROLES = [
+    "Associate", "Consultant"
+]
+
+# -----------------------------
+# EDUCATION (TARGET LIST)
+# -----------------------------
+TARGET_UNIS = [
+    "LSE", "Oxford", "Cambridge", "Imperial", "UCL",
+    "NUS", "NTU", "HKU",
+    "University of Melbourne", "ANU", "University of Sydney",
+    "Harvard", "Stanford", "Yale", "Princeton"
+]
+
+# -----------------------------
+# ASIAN HERITAGE SIGNALS
+# -----------------------------
+ASIAN_NAMES = [
+    "Aarav", "Arjun", "Wei", "Li", "Chen", "Ananya",
+    "Rahul", "Kumar", "Tan", "Lim"
+]
+
+ASIA_COUNTRIES = ["Singapore", "India", "China", "Malaysia"]
 
 # -----------------------------
 # HELPERS
 # -----------------------------
-
-def maybe_null(value, prob=0.02):
-    return None if random.random() < prob else value
-
-
 def random_phone():
     return f"+1-{random.randint(200,999)}-{random.randint(100,999)}-{random.randint(1000,9999)}"
-
 
 def random_email(name):
     return f"{name.lower().replace(' ','.')}@gmail.com"
 
-
 def random_date():
-    return fake.date_between(start_date=datetime(2010,1,1), end_date=datetime(2024,12,31)).isoformat()
+    return fake.date_between(
+        start_date=datetime(2015, 1, 1),
+        end_date=datetime(2024, 12, 31)
+    ).isoformat()
+
+def generate_location(country):
+    return f"{random.choice(CITIES[country])}, {country}"
 
 # -----------------------------
-# PROFILE BUILDER
+# PROFILE BUILDER (STRICT)
 # -----------------------------
-
 def build_profile(i):
 
-    full_name = fake.name()
-    first_name = full_name.split()[0]
-    last_name = full_name.split()[-1]
+    # ---------------- Identity (bias towards Asian heritage)
+    first_name = random.choice(ASIAN_NAMES) if random.random() < 0.7 else fake.first_name()
+    last_name = fake.last_name()
+    full_name = f"{first_name} {last_name}"
 
-    company, industry, company_country = random.choice(COMPANIES)
-    uni, uni_country, school_type = random.choice(UNIVERSITIES)
+    # ---------------- Location (STRICT FILTER)
+    country = random.choice(ALLOWED_LOCATIONS)
 
-    job_title = random.choice(ROLES)
-    sex = random.choice(["M", "F"])
+    # ---------------- Track Selection
+    track = random.choice(["IB", "BUYSIDE", "MBB"])
 
-    return {
-        # ---------------- Identity ----------------
+    if track == "IB":
+        company = random.choice(IB_COMPANIES)
+        job_title = random.choice(IB_ROLES)
+
+    elif track == "BUYSIDE":
+        company = random.choice(BUYSIDE_COMPANIES)
+        job_title = random.choice(BUYSIDE_ROLES)
+
+    else:  # MBB with finance linkage
+        company = random.choice(MBB_COMPANIES)
+        job_title = random.choice(MBB_ROLES) + " - Private Equity / Corporate Finance"
+
+    # ---------------- Experience (STRICT: 2–4 years)
+    years_experience = random.randint(2, 4)
+
+    # ---------------- Education (TARGET ONLY)
+    university = random.choice(TARGET_UNIS)
+
+    # ---------------- Asia connection (MANDATORY SIGNAL)
+    asia_link = random.choice(ASIA_COUNTRIES)
+
+    profile = {
         "id": str(i),
         "full_name": full_name,
         "first_name": first_name,
         "last_name": last_name,
-        "sex": sex,
+        "sex": random.choice(["M", "F"]),
 
-        # ---------------- Contact ----------------
         "mobile_phone": random_phone(),
         "emails": random_email(full_name),
 
-        # ---------------- Location ----------------
-        "all_countries": random.sample(COUNTRIES, k=random.randint(1,2)),
+        # LOCATION (NOT ASIA)
+        "current_location": generate_location(country),
+        "all_countries": [country, asia_link],  # ensures Asia linkage
         "location_last_updated": random_date(),
 
-        # ---------------- Job Context (IMPORTANT for scoring) ----------------
         "current_company": company,
         "job_title": job_title,
-        "years_experience": random.randint(0, 12),
+        "years_experience": years_experience,
 
-        # ---------------- Experience (FIXED STRUCTURE) ----------------
         "experience": [
             {
                 "company": company,
                 "title": job_title,
-                "level": random.choice(JOB_LEVELS),
-                "industry": industry,
-                "country": company_country
+                "level": "Analyst" if years_experience < 3 else "Associate",
+                "industry": "Finance",
+                "country": country
             }
         ],
 
-        # ---------------- Education (FIXED STRUCTURE) ----------------
         "education": [
             {
-                "school": uni,
+                "school": university,
                 "degree": random.choice(["Bachelors", "Masters"]),
                 "end_date": random_date()
             }
-        ]
+        ],
+
+        # Explicit Asia return signal (helps downstream model)
+        "asia_connection": asia_link
     }
+
+    return profile
+
 
 # -----------------------------
 # GENERATE
 # -----------------------------
-
 def generate():
     return [build_profile(i) for i in range(TOTAL)]
 
 data = generate()
-
 df = pd.DataFrame(data)
 
 df.to_csv("candidates.csv", index=False)

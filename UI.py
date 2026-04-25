@@ -4,6 +4,8 @@ import plotly.express as px
 from datasets import load_dataset
 import plotly.graph_objects as go
 import numpy as np
+import ast
+import streamlit as st
 
 # -----------------------------
 # CONFIG
@@ -56,7 +58,25 @@ st.caption("AI-powered candidate ranking system for sourcing and screening")
 def load_data():
     dataset = load_dataset("Bhavna1998/scored_output", split="train")
     df = dataset.to_pandas()
+
+    # -----------------------------
+    # FIX: Parse structured columns
+    # -----------------------------
+    cols_to_parse = ["countries", "experience", "education", "score_breakdown"]
+
+    for col in cols_to_parse:
+        if col in df.columns:
+            df[col] = df[col].apply(
+                lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+            )
+
+    # -----------------------------
+    # FIX: Clean null-like values
+    # -----------------------------
+    df = df.fillna("")
+
     return df
+
 
 df = load_data()
 full_df = df.copy()

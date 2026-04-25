@@ -39,7 +39,7 @@ st.markdown("""
 
 st.markdown("""
 <div style="font-size:14px; font-style:italic; font-weight:bold; line-height:1.4">
-This dashboard ranks candidates based on AI-generated scoring pipeline and helps recruiters filter, compare, and export top candidates
+This dashboard ranks candidates based on a scoring pipeline and helps recruiters filter, compare, and export top candidates
 </div>
 """, unsafe_allow_html=True)
 
@@ -75,17 +75,37 @@ st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
 <div style="font-size:13px; font-style:italic; line-height:1.4">
-Adjusts shortlist and charts only. Does NOT affect dataset-level KPIs.
+Sets the minimum AI score threshold; only candidates above this score appear in the shortlist and charts.
 </div>
 """, unsafe_allow_html=True)
 
-min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
+min_score = st.sidebar.slider("Minimum Score", 0, 100, 0)
+
+st.markdown("""
+<div style="font-size:13px; font-style:italic; line-height:1.5">
+
+<b>Tier Definition (Based on AI Score)</b><br><br>
+
+• <b>Tier A</b> → final_score ≥ 75 (top-performing, high-confidence candidates)<br>
+• <b>Tier B</b> → 60 ≤ final_score < 75 (strong candidates with competitive profiles)<br>
+• <b>Tier C</b> → 50 ≤ final_score < 60 (mid-range candidates with mixed signals)<br>
+• <b>Below</b> → final_score < 50 (low-fit or weak signal profiles)<br>
+
+</div>
+""", unsafe_allow_html=True)
 
 tier_filter = st.sidebar.multiselect(
     "Tier Filter",
     sorted(full_df["tier"].dropna().unique().tolist()) if "tier" in full_df.columns else [],
     default=sorted(full_df["tier"].dropna().unique().tolist()) if "tier" in full_df.columns else []
 )
+
+st.sidebar.markdown("""
+<div style="font-size:13px; font-style:italic; line-height:1.4">
+Filters candidates by gender for segmentation analysis; does not influence scoring or ranking.
+</div>
+""", unsafe_allow_html=True)
+
 
 gender_filter = st.sidebar.multiselect(
     "Gender Filter",

@@ -68,6 +68,16 @@ if df.empty:
 full_df = df.copy()
 
 # -----------------------------
+# CLEAN ONLY (NO NEW FEATURES)
+# -----------------------------
+
+if "tier" in full_df.columns:
+    full_df["tier"] = full_df["tier"].astype(str).str.strip()
+
+if "sex" in full_df.columns:
+    full_df["sex"] = full_df["sex"].astype(str).str.strip().str.upper()
+
+# -----------------------------
 # SIDEBAR FILTERS
 # -----------------------------
 
@@ -81,10 +91,13 @@ Adjusts shortlist and chart view only. Does NOT change dataset-level KPIs.
 
 min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
 
+# dynamic tiers from dataset (IMPORTANT FIX)
+VALID_TIERS = sorted(full_df["tier"].dropna().unique().tolist())
+
 tier_filter = st.sidebar.multiselect(
     "Tier Filter",
-    ["A", "B", "C", "Below"],
-    default=["A", "B", "C"]
+    VALID_TIERS,
+    default=VALID_TIERS
 )
 
 gender_filter = st.sidebar.multiselect(
@@ -94,15 +107,15 @@ gender_filter = st.sidebar.multiselect(
 )
 
 # -----------------------------
-# APPLY FILTERS (SOURCE OF TRUTH)
+# APPLY FILTERS (SAFE)
 # -----------------------------
 
 filtered = full_df.copy()
 
-filtered = filtered[
-    (filtered["final_score"] >= min_score) &
-    (filtered["tier"].isin(tier_filter))
-]
+filtered = filtered[filtered["final_score"] >= min_score]
+
+if "tier" in filtered.columns:
+    filtered = filtered[filtered["tier"].isin(tier_filter)]
 
 if "sex" in filtered.columns:
     filtered = filtered[filtered["sex"].isin(gender_filter)]
@@ -122,12 +135,12 @@ tier_counts = full_df["tier"].value_counts()
 col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("Total", total)
-col2.metric("Tier A", f"{(tier_counts.get('A',0)/total)*100:.1f}%")
-col3.metric("Tier B", f"{(tier_counts.get('B',0)/total)*100:.1f}%")
-col4.metric("Tier C + Below", f"{((tier_counts.get('C',0)+tier_counts.get('Below',0))/total)*100:.1f}%")
+col2.metric("Tier A", tier_counts.get("A", 0))
+col3.metric("Tier B", tier_counts.get("B", 0))
+col4.metric("Tier C + Below", tier_counts.get("C", 0) + tier_counts.get("Below", 0))
 
 # -----------------------------
-# TABLE (FILTERED)
+# TABLE
 # -----------------------------
 
 st.subheader("Ranked Shortlist (Filtered)")
@@ -142,7 +155,7 @@ st.dataframe(
 )
 
 # -----------------------------
-# CHART (FILTERED + GENDER INCLUDED)
+# CHART
 # -----------------------------
 
 st.subheader("Score Distribution (Tier + Gender)")
@@ -159,21 +172,13 @@ fig = px.histogram(
     x="final_score",
     color="tier_gender",
     nbins=20,
-    barmode="overlay",
-    category_orders={
-        "tier_gender": [
-            "A | M", "A | F",
-            "B | M", "B | F",
-            "C | M", "C | F",
-            "Below | M", "Below | F"
-        ]
-    }
+    barmode="overlay"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 # -----------------------------
-# EXPORT (FILTERED ONLY)
+# EXPORT
 # -----------------------------
 
 st.download_button(

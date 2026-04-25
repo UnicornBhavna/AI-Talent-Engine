@@ -54,19 +54,13 @@ st.caption("AI-powered sourcing analytics for talent screening and ranking")
 
 @st.cache_data
 def load_data():
-    dataset = load_dataset(
-        "csv",
-        data_files="https://huggingface.co/datasets/Bhavna1998/candidates/resolve/main/scored_output.csv"
-    )
-
-    df = dataset["train"].to_pandas()
-    return df
-
+    dataset = load_dataset("Bhavna1998/candidates", split="train")
+    return dataset.to_pandas()
 
 df = load_data()
 
 if df.empty:
-    st.error("Dataset is empty or failed to load from Hugging Face.")
+    st.error("Dataset is empty or failed to load.")
     st.stop()
 
 if "final_score" not in df.columns:

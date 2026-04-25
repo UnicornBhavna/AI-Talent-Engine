@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datasets import load_dataset
 
 # -----------------------------
-# STREAMLIT CONFIG (MUST BE FIRST)
+# CONFIG
 # -----------------------------
 
 st.set_page_config(
@@ -14,31 +13,17 @@ st.set_page_config(
 )
 
 # -----------------------------
-# THEME (UI LAYER ONLY)
+# THEME
 # -----------------------------
-"""
-WHY:
-- Keeps UI visually consistent
-- Ensures analytics view is readable for recruiters
-- No impact on logic or scoring
-"""
 
 st.markdown("""
     <style>
-        .main {
-            background-color: white;
-            color: black;
-        }
-
-        .stApp {
-            background-color: white;
-        }
-
+        .main { background-color: white; color: black; }
+        .stApp { background-color: white; }
         html, body, [class*="css"] {
             background-color: white !important;
             color: black !important;
         }
-
         .stMetric {
             background-color: #f5f5f5;
             padding: 15px;
@@ -51,27 +36,22 @@ st.markdown("""
 # TITLE
 # -----------------------------
 
+st.markdown("""
+<div style="font-size:14px; font-style:italic; font-weight:bold; line-height:1.4">
+This dashboard ranks candidates based on AI-generated scoring pipeline and helps recruiters filter, compare, and export top candidates
+</div>
+""", unsafe_allow_html=True)
+
 st.title("Candidate Intelligence Dashboard")
-st.caption("AI-powered sourcing analytics for talent screening and ranking")
+st.caption("AI-powered candidate ranking system for sourcing and screening")
 
 # -----------------------------
-# DATA LOADING (HUGGING FACE)
+# DATA LOADING
 # -----------------------------
-"""
-WHY THIS APPROACH:
-- Uses HF dataset as single source of truth
-- Avoids local file dependency (Streamlit Cloud safe)
-- Ensures reproducibility across environments
-
-LIMITATION:
-- Requires dataset repo to be public OR authenticated
-- Assumes dataset has a default 'train' split
-"""
 
 @st.cache_data
 def load_data():
-    dataset = load_dataset("Bhavna1998/scored_output", split="train")
-    return dataset.to_pandas()
+    return pd.read_csv("scored_output.csv")
 
 df = load_data()
 
@@ -83,19 +63,18 @@ if df.empty:
     st.error("Dataset is empty or failed to load.")
     st.stop()
 
-if "final_score" not in df.columns:
-    st.error("Missing required column: final_score")
-    st.stop()
+df["final_score"] = pd.to_numeric(df["final_score"], errors="coerce").fillna(0)
+
+# -----------------------------
+# FIX: NORMALIZE GENDER COLUMN (IMPORTANT)
+# -----------------------------
+
+if "sex" in df.columns:
+    df["sex"] = df["sex"].astype(str).str.strip().str.upper()
 
 # -----------------------------
 # TIERING LOGIC
 # -----------------------------
-"""
-WHY:
-- Converts continuous score into interpretable recruiter buckets
-- Enables filtering + segmentation in UI
-- Makes ranking explainable
-"""
 
 def assign_tier(score):
     if score >= 65:
@@ -109,41 +88,28 @@ def assign_tier(score):
 df["tier"] = df["final_score"].apply(assign_tier)
 
 # -----------------------------
-# DIVERSITY FLAG EXTRACTION
-# -----------------------------
-"""
-WHY:
-- Extracts structured demographic signal safely
-- Prevents runtime crashes from malformed HF data
-
-LIMITATION:
-- This is heuristic-based upstream output
-- Should NOT be used for decision-making or ranking
-"""
-
-def extract_female(x):
-    if isinstance(x, dict):
-        return x.get("is_female", False)
-    return False
-
-df["is_female"] = df["diversity_flag"].apply(extract_female) if "diversity_flag" in df.columns else False
-
-# -----------------------------
-# SIDEBAR CONTROLS
+# SIDEBAR FILTERS
 # -----------------------------
 
 st.sidebar.header("Filters")
 
 st.sidebar.markdown("""
-Use filters to refine candidate shortlist.
-All metrics are derived from precomputed scoring pipeline.
-""")
+<div style="font-size:13px; line-height:1.4; font-style:italic">
+Adjusts which candidates appear in the shortlist and chart based on score threshold and tier selection, without affecting overall dataset metrics.
+</div>
+""", unsafe_allow_html=True)
 
-min_score = st.sidebar.slider(
-    "Minimum Score (0–100)",
-    0, 100, 50,
-    help="Filters out candidates below this AI composite score threshold."
-)
+min_score = st.sidebar.slider("Minimum Score", 0, 100, 50)
+
+st.sidebar.markdown("""
+<div style="font-size:13px; line-height:1.4; font-style:italic">
+<b>Score Bands</b><br><br>
+• <b>Tier A</b> → top ~35% scores (high-confidence, strongest profiles)<br>
+• <b>Tier B</b> → next strong cohort (competitive but not elite)<br>
+• <b>Tier C</b> → mid-range candidates with mixed signals<br>
+• <b>Below</b> → low-fit or weak signal profiles<br>
+</div>
+""", unsafe_allow_html=True)
 
 tier_filter = st.sidebar.multiselect(
     "Tier Filter",
@@ -151,73 +117,54 @@ tier_filter = st.sidebar.multiselect(
     default=["A", "B", "C"]
 )
 
-diversity_only = st.sidebar.checkbox(
-    "Diversity Only (Female candidates)",
-    help="Uses heuristic gender proxy (low confidence, non-decision feature)."
+st.sidebar.markdown("""
+<div style="font-size:13px; line-height:1.4; font-style:italic">
+Filters candidates by gender field present in the dataset (used only for segmentation, not scoring).
+</div>
+""", unsafe_allow_html=True)
+
+gender_filter = st.sidebar.multiselect(
+    "Gender Filter",
+    ["M", "F"],
+    default=["M", "F"]
 )
 
 # -----------------------------
 # APPLY FILTERS
 # -----------------------------
-"""
-WHY:
-- Ensures filtering does NOT modify original dataset
-- Keeps UI state independent of underlying data
-"""
 
 filtered = df[df["final_score"] >= min_score]
 filtered = filtered[filtered["tier"].isin(tier_filter)]
 
-if diversity_only:
-    filtered = filtered[filtered["is_female"] == True]
+if "sex" in df.columns:
+    filtered = filtered[filtered["sex"].isin(gender_filter)]
 
 filtered = filtered.sort_values("final_score", ascending=False)
 
 # -----------------------------
-# KPI SECTION
+# KPI SECTION (FULL DATASET)
 # -----------------------------
-"""
-WHY:
-- Shows full dataset distribution (not filtered view)
-- Helps understand pipeline bias and tier spread
-"""
 
 st.divider()
 st.subheader("Dataset Overview")
 
 total = len(df)
+tier_counts = df["tier"].value_counts()
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Total Candidates", total)
-col2.metric("Tier A", len(df[df["tier"] == "A"]))
-col3.metric("Tier B", len(df[df["tier"] == "B"]))
-col4.metric("Tier C + Below", len(df[df["tier"].isin(["C", "Below"])]))
+col1.metric("Total", total)
+col2.metric("Tier A", f"{(tier_counts.get('A',0)/total)*100:.1f}%")
+col3.metric("Tier B", f"{(tier_counts.get('B',0)/total)*100:.1f}%")
+col4.metric("Tier C + Below", f"{((tier_counts.get('C',0)+tier_counts.get('Below',0))/total)*100:.1f}%")
 
 # -----------------------------
-# TABLE VIEW
+# TABLE
 # -----------------------------
 
 st.subheader("Ranked Shortlist")
 
-st.markdown("""
-This table shows filtered candidates ranked by AI score.
-
-Signals used upstream:
-- Employer tier (IB / PE / Hedge Fund proxy)
-- Returnee signal (geographic + education heuristic)
-- Experience alignment
-- Education quality proxy
-""")
-
-display_cols = [
-    "id",
-    "full_name",
-    "final_score",
-    "tier",
-    "is_female"
-]
-
+display_cols = ["id", "full_name", "final_score", "tier"]
 available_cols = [c for c in display_cols if c in filtered.columns]
 
 st.dataframe(
@@ -227,10 +174,10 @@ st.dataframe(
 )
 
 # -----------------------------
-# VISUALIZATION
+# CHART
 # -----------------------------
 
-st.subheader("Score Distribution")
+st.subheader("Score Distribution (Filtered View)")
 
 fig = px.histogram(
     filtered,
@@ -252,6 +199,5 @@ st.download_button(
     "⬇ Download Filtered Shortlist",
     csv,
     "shortlist.csv",
-    "text/csv",
-    help="Exports current filtered dataset for offline analysis or recruiter use."
+    "text/csv"
 )

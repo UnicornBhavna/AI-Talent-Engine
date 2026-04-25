@@ -6,6 +6,12 @@ from datetime import datetime
 fake = Faker()
 
 # -----------------------------
+# CONFIG
+# -----------------------------
+
+TOTAL = int(input("Enter total records: "))
+
+# -----------------------------
 # CORE POOLS
 # -----------------------------
 
@@ -31,47 +37,40 @@ UNIVERSITIES = [
     ("Cambridge University", "UK", "University"),
     ("National University of Singapore", "Singapore", "University"),
     ("Nanyang Technological University", "Singapore", "University"),
-    ("University of Toronto", "Canada", "University"),
+]
+
+COUNTRIES = ["USA", "UK", "Singapore", "Germany", "Switzerland", "Canada"]
+
+ROLES = [
+    "Investment Banking Analyst",
+    "Equity Research Analyst",
+    "Private Equity Associate",
+    "Hedge Fund Analyst"
 ]
 
 JOB_LEVELS = ["Analyst", "Associate", "Senior Associate", "VP"]
-
-ROLES = {
-    "Investment Banking Analyst": "Investment Banking",
-    "Equity Research Analyst": "Research",
-    "Private Equity Associate": "Private Equity",
-    "Hedge Fund Analyst": "Hedge Fund",
-}
-
-INDUSTRIES = ["Banking", "Asset Management", "Private Equity", "Consulting"]
-
-COUNTRIES = ["USA", "UK", "Singapore", "Germany", "Switzerland", "Canada"]
 
 # -----------------------------
 # HELPERS
 # -----------------------------
 
-def maybe_null(value, prob=0.05):
-    """Controlled sparsity (only 5% null max)"""
+def maybe_null(value, prob=0.02):
     return None if random.random() < prob else value
 
 
 def random_phone():
-    return maybe_null(f"+1-{random.randint(200,999)}-{random.randint(100,999)}-{random.randint(1000,9999)}", 0.03)
+    return f"+1-{random.randint(200,999)}-{random.randint(100,999)}-{random.randint(1000,9999)}"
 
 
 def random_email(name):
-    return maybe_null(f"{name.lower().replace(' ','.')}@gmail.com", 0.02)
+    return f"{name.lower().replace(' ','.')}@gmail.com"
 
 
-def random_date(start=2010, end=2024):
-    return fake.date_between(
-        start_date=datetime(start, 1, 1),
-        end_date=datetime(end, 12, 31)
-    )
+def random_date():
+    return fake.date_between(start_date=datetime(2010,1,1), end_date=datetime(2024,12,31)).isoformat()
 
 # -----------------------------
-# MAIN PROFILE
+# PROFILE BUILDER
 # -----------------------------
 
 def build_profile(i):
@@ -83,8 +82,7 @@ def build_profile(i):
     company, industry, company_country = random.choice(COMPANIES)
     uni, uni_country, school_type = random.choice(UNIVERSITIES)
 
-    job_title = random.choice(list(ROLES.keys()))
-
+    job_title = random.choice(ROLES)
     sex = random.choice(["M", "F"])
 
     return {
@@ -95,76 +93,51 @@ def build_profile(i):
         "last_name": last_name,
         "sex": sex,
 
-        # ---------------- Social ----------------
-        "linkedin_id": maybe_null(fake.random_number(9), 0.02),
-
         # ---------------- Contact ----------------
         "mobile_phone": random_phone(),
         "emails": random_email(full_name),
 
-        # ---------------- Industry ----------------
-        "industry": industry,
-
-        # ---------------- Job ----------------
-        "job_title": job_title,
-        "job_company_name": company,
-        "job_company_industry": industry,
-
         # ---------------- Location ----------------
-        "all_countries": random.sample(COUNTRIES, k=random.randint(1, 2)),
-        "location_last_updated": str(random_date(2020, 2024)),
+        "all_countries": random.sample(COUNTRIES, k=random.randint(1,2)),
+        "location_last_updated": random_date(),
 
-        # ---------------- Experience ----------------
+        # ---------------- Job Context (IMPORTANT for scoring) ----------------
+        "current_company": company,
+        "job_title": job_title,
+        "years_experience": random.randint(0, 12),
+
+        # ---------------- Experience (FIXED STRUCTURE) ----------------
         "experience": [
             {
-                "title": job_title,
-                "clean_title": job_title,
-                "role": ROLES[job_title],
-                "levels": random.choice(JOB_LEVELS),
                 "company": company,
-                "company_name_clean": company,
-                "company_country": company_country
+                "title": job_title,
+                "level": random.choice(JOB_LEVELS),
+                "industry": industry,
+                "country": company_country
             }
         ],
 
-        # ---------------- Education ----------------
+        # ---------------- Education (FIXED STRUCTURE) ----------------
         "education": [
             {
                 "school": uni,
-                "school_country": uni_country,
-                "school_type": school_type,
-                "end_date": str(random_date(2015, 2022)),
-                "degree": random.choice(["Bachelors", "Masters"])
+                "degree": random.choice(["Bachelors", "Masters"]),
+                "end_date": random_date()
             }
         ]
     }
 
-
 # -----------------------------
-# GENERATE DATASET
-# -----------------------------
-
-def generate(n):
-    data = []
-    for i in range(n):
-        data.append(build_profile(i))
-        if i % 5000 == 0:
-            print(f"Generated {i} records...")
-    return data
-
-
-# -----------------------------
-# SAVE
+# GENERATE
 # -----------------------------
 
-data = generate(50000)
+def generate():
+    return [build_profile(i) for i in range(TOTAL)]
 
-print("Generation complete. Converting to DataFrame...")
+data = generate()
 
 df = pd.DataFrame(data)
 
-print("DataFrame created:", df.shape)
-
 df.to_csv("candidates.csv", index=False)
 
-print("Generated clean structured candidates.csv ✔")
+print("DONE ✔ Generated:", df.shape)

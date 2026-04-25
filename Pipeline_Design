@@ -1,157 +1,222 @@
 # 📄 Pipeline Design Note — Candidate Intelligence System (Task 1A)
 
-## 1. APIs Used & Rationale
+## 1. Data Sources & Rationale
 
-The pipeline was originally designed to operate on real-world talent intelligence data from **People Data Labs (PDL)**, which provides structured enrichment across people, companies, education, and social profiles.
+The system is designed around two data ingestion approaches:
 
-### Original API (Intended: People Data Labs)
+### A) External API (Coresignal — Primary Ingestion Source)
+The pipeline fetches real-world candidate data using the **Coresignal Professional Network API**:
+
+`/professional_network/person/search`
+
 Used for:
 - Candidate identity resolution
-- Job history enrichment
-- Education + skills extraction
-- Company metadata (industry, size, tier signals)
+- Job title + company extraction
+- Education + experience enrichment
+- Location + contact details
+- Social profile metadata (LinkedIn)
 
-**Mapping to mandate criteria:**
-- `current_company` → employer tier classification (IB / PE / hedge fund)
-- `education` → elite university + returnee signal detection
-- `location` → geography segmentation (Asia vs West)
-- `job_title` → role classification (analyst / associate / etc.)
-- `years_experience` → seniority proxy for scoring
-
----
-
-### Fallback Attempt: Alternative APIs
-After exhausting People Data Labs credits, alternative enrichment APIs were tested for similar structured person-level data. However, these also had strict rate limits and credit constraints, preventing reliable large-scale usage.
+**Mapped fields used in pipeline:**
+- `current_company` → employer classification (tier-based scoring)
+- `job_title` → role signal for scoring logic
+- `education` → elite university detection + returnee signal
+- `location` / `countries` → geography-based signal extraction
+- `experience` → structured experience history (if available)
+- `sex/gender` → normalized to M/F/U
 
 ---
 
-### Final Approach: Synthetic Data Generation
-Due to API limitations, a **synthetic dataset generator (Faker-based)** was implemented.
+### B) Synthetic Data Generator (Faker-based fallback)
+A synthetic dataset generator was implemented using **Faker + structured domain pools**.
 
-This dataset is designed to:
-- Mimic real-world investment banking / PE / hedge fund talent distributions
-- Preserve realistic correlations:
-  - Elite firms → higher scores and experience
-  - Elite universities → stronger candidate profiles
-  - Geography → returnee signal likelihood (Asia vs West)
-- Enable reproducible testing without API dependency
+It generates:
+- Investment banking / PE / hedge fund / consulting profiles
+- Realistic company-school-role distributions
+- Structured `experience` and `education` arrays
 
-> This ensures the system behaves like a real-world talent intelligence pipeline even without live external data access.
+Key characteristics:
+- Controlled sparsity via `maybe_null()` (~2–5%)
+- Realistic firm distribution (Tier 1 IB, PE, consulting, etc.)
+- Geographic diversity (USA, UK, Singapore, EU, Canada)
+- Standardized job roles mapped via `ROLES`
+
+> This dataset is used for offline development, testing, and reproducibility when API data is unavailable or limited.
 
 ---
 
-## 2. Filter Logic (Pre-Scoring)
+## 2. Pre-Scoring Logic (Important Correction)
 
-Before scoring, minimal filtering is applied to preserve data integrity while avoiding unnecessary data loss.
+❌ No explicit filtering step exists in the current pipeline.
 
-### Records are excluded only if:
-- `full_name` is missing
-- `current_company` is missing
-- Record structure is invalid or corrupted
-- Both `education` and `experience` are completely null
+Instead:
+- All records are processed
+- Invalid records are skipped only during scoring using `try/except`
+- No pre-removal based on missing fields is performed
 
-### Design rationale:
-Filtering is intentionally minimal because:
-- The scoring system is designed to be robust to missing information
-- Missing fields reduce confidence rather than exclude candidates
-- Prioritize coverage over strict pre-filtering
+### Implication:
+- Data completeness is handled downstream, not upstream
+- System is designed for robustness over strict filtering
 
 ---
 
 ## 3. Handling Missing / Null Fields
 
-The system is designed to be fully defensive and fault-tolerant.
+The pipeline is explicitly defensive across all stages:
 
-### Default handling strategy:
-- Missing strings → `""`
-- Missing numeric values → `0`
+### Default behavior:
+- Missing strings → `None` or `""` depending on source
+- Missing numeric fields → `0` (e.g., `years_experience`)
 - Missing lists (`education`, `experience`) → `[]`
-- Missing employer/education → reduces score contribution instead of failing
+- Missing optional fields → safely ignored in scoring
 
-### Core principle:
-> Missing data reduces signal strength but never breaks the pipeline.
-
-This ensures stable performance across both synthetic and real-world API data.
+### Key design principle:
+> Missing data reduces signal strength but never breaks execution.
 
 ---
 
 ## 4. Error Handling Strategy
 
-The pipeline is built for batch-scale resilience.
-
-### During scoring:
+### Scoring Layer:
 - Each record is wrapped in `try/except`
-- Failed records are skipped safely
-- Pipeline continues without interruption
+- Failed records are skipped without stopping execution
+- Pipeline continues batch processing safely
 
-### If real APIs were integrated:
-
-#### Rate limit errors (429):
-- Exponential backoff retry strategy
-- Batch-level throttling
-
-#### Partial API responses:
-- Missing fields defaulted safely
-- Scoring continues with reduced confidence
-
-#### Corrupt payloads:
-- Logged and excluded from final dataset
+### API Layer (Coresignal ingestion):
+- Network failures → retried with delay
+- Rate limit (429) → sleep + retry
+- Invalid responses → logged and skipped
+- Empty pages → terminate pagination loop
 
 ---
 
-## 5. Synthetic Data Justification
+## 5. Diversity Flag (Heuristic — Auditable & Non-Scoring)
 
-Due to external constraints:
+The system includes a **separate heuristic field**:
 
-- People Data Labs credits were exhausted
-- Alternative APIs were also rate-limited
-- Real-world data extraction became inconsistent
+- `is_female`
+- `gender_confidence`
 
-As a result, a synthetic dataset was created to:
+### Method:
+- Based on first-name suffix heuristics (e.g., vowel-ending patterns)
+- Simple deterministic rule-based logic
+- No ML model used
 
-- Preserve realism in candidate distributions
-- Simulate financial services hiring patterns
-- Maintain statistical balance across tiers (A/B/C/Below)
-- Enable reproducible development and testing
-
-> The synthetic dataset acts as a realistic proxy for production-grade talent intelligence data.
-
----
-
-## 6. Design Philosophy
-
-This system is built on the following principles:
-
-- Robustness over perfect data completeness
-- Explainability over black-box scoring
-- Fault tolerance over strict validation
-- Modular pipeline separation (data → scoring → UI)
-- Realistic simulation when real data is unavailable
+### Important:
+- ❌ Not used in scoring logic
+- ✔ Purely informational / audit field
 
 ---
 
-## 7. Output Contract
+## 6. Synthetic Data Justification
 
-The final output is a **master enriched dataset**, which includes:
+Synthetic dataset generation was introduced due to:
+
+- Limited or inconsistent availability of external structured talent APIs
+- Need for reproducible testing environment
+- Requirement for controlled distribution of seniority + firm types
+
+### What it simulates:
+- Investment banking / PE / consulting ecosystems
+- Tier-based employer distribution
+- Education patterns (elite vs non-elite universities)
+- Structured career paths via `experience[]`
+
+---
+
+## 7. Scoring System Design
+
+The scoring engine computes a **0–100 composite score** based on:
+
+### A) Employer Tier
+Classified via `classify_employer()`:
+- Tier 1 IB → highest score
+- PE / hedge fund → high score
+- Tier 2 IB → medium score
+- Other → baseline score
+
+---
+
+### B) Returnee Signal
+Computed using:
+- Geographic keyword matches (Asia-related signals)
+- Education in Asian universities
+
+Output:
+- `returnee_score` (0–10)
+
+---
+
+### C) Experience Signal
+From:
+- `years_experience` (defaults to 0 if missing)
+
+⚠️ Note:
+- Synthetic dataset does **not always include this field**
+
+---
+
+### D) Education Signal
+Elite university check includes:
+- NUS, NTU, Oxford, Cambridge, Harvard, Stanford
+
+---
+
+## 8. Output Contract (Final Dataset Schema)
+
+The final output is a **merged master dataset**.
 
 ### Original fields:
-- full_name, education, experience, location, etc.
-
-### Added fields:
-- `final_score` (0–100 composite score)
-- `employer_tier` (classification: A/B/C/Below logic)
-- `returnee_signal` (Asia linkage heuristic score)
-- `diversity_flag` (heuristic gender proxy)
+- full_name
+- job_title
+- current_company
+- education
+- experience
+- location / countries
+- emails / mobile_phone (synthetic only)
+- linkedin_url / linkedin_id (API only)
 
 ---
 
-## Outcome
+### Added scoring fields:
+- `final_score` (0–100)
+- `employer_tier` (tier_1_ib / tier_2_ib / pe_hedge_top / other)
+- `employer_match` (matched firm if any)
+- `returnee_score` (0–10)
+- `is_female` (heuristic flag)
+- `gender_confidence` (low / medium)
 
-This design ensures a single dataset can power:
-- Streamlit analytics dashboard
-- Filtering and ranking UI
-- Exportable recruiter shortlist
-- Downstream experimentation and analysis
+---
+
+## 9. Design Philosophy
+
+- Fault tolerance over strict schema enforcement
+- Explainability over black-box scoring
+- Modular pipeline separation:
+  - Ingestion → Cleaning → Scoring → Output
+- Robust handling of missing / synthetic / API data
+- Reproducible dataset generation when APIs are unavailable
+
+---
+
+## 10. Output Usage
+
+The final enriched dataset powers:
+- Candidate ranking & filtering UI
+- Analytics dashboards
+- Recruiter shortlisting tools
+- Downstream ML experimentation
+
+---
+
+## Conclusion
+
+This pipeline combines:
+- Real-world API ingestion (Coresignal)
+- Synthetic structured data generation (Faker)
+- Deterministic scoring logic
+- Fully resilient transformation + scoring layers
+
+It ensures consistent candidate intelligence outputs even when real-world data is incomplete or unavailable.
 
 ---
 

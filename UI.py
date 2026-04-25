@@ -108,7 +108,7 @@ st.sidebar.markdown("""
 
 <b>Tier Definition (Based on AI Score)</b><br><br>
 
-• <b>Tier A</b> → final_score ≥ 75 (elite candidates)<br>
+• <b>Tier A</b> → total_score ≥ 75 (elite candidates)<br>
 • <b>Tier B</b> → 60–74 (strong candidates)<br>
 • <b>Tier C</b> → 50–59 (mid-range candidates)<br>
 • <b>Below</b> → < 50 (low-fit candidates)<br>
@@ -140,8 +140,8 @@ gender_filter = st.sidebar.multiselect(
 # -----------------------------
 filtered = full_df.copy()
 
-if "final_score" in filtered.columns:
-    filtered = filtered[filtered["final_score"] >= min_score]
+if "total_score" in filtered.columns:
+    filtered = filtered[filtered["total_score"] >= min_score]
 
 if "tier" in filtered.columns:
     filtered = filtered[filtered["tier"].isin(tier_filter)]
@@ -174,7 +174,7 @@ col4.metric("Below", f"{(tier_counts.get('Below',0)/total)*100:.1f}%")
 # -----------------------------
 st.subheader("Filtered Data")
 
-#display_cols = ["id", "full_name", "final_score", "tier", "sex"]
+#display_cols = ["id", "full_name", "total_score", "tier", "sex"]
 #available_cols = [c for c in display_cols if c in filtered.columns]
 
 st.dataframe(
@@ -196,7 +196,7 @@ plot_df = filtered.copy()
 bins = list(range(0, 101, 10))
 
 plot_df["score_bin"] = pd.cut(
-    plot_df["final_score"],
+    plot_df["total_score"],
     bins=bins,
     include_lowest=True
 )

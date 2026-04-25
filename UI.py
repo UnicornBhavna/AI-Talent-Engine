@@ -275,7 +275,7 @@ export_df = filtered[
         "employer_tier",
         "total_score",
         "score_breakdown",
-        "shortlist_tier",
+        "tier",   # ✅ FIXED
         "diversity_flag",
         "linkedin_url",
         "score_rationale"

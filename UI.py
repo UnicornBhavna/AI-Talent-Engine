@@ -65,28 +65,6 @@ if df.empty:
     st.error("Dataset is empty or failed to load.")
     st.stop()
 
-df["final_score"] = pd.to_numeric(df["final_score"], errors="coerce").fillna(0)
-
-# -----------------------------
-# TIERING LOGIC
-# -----------------------------
-
-def assign_tier(score):
-    if score >= 65:
-        return "A"
-    elif score >= 50:
-        return "B"
-    elif score >= 35:
-        return "C"
-    return "Below"
-
-df["tier"] = df["final_score"].apply(assign_tier)
-
-# IMPORTANT: clean + normalize gender
-if "sex" in df.columns:
-    df["sex"] = df["sex"].astype(str).str.upper().str.strip()
-    df.loc[~df["sex"].isin(["M", "F"]), "sex"] = "U"
-
 full_df = df.copy()
 
 # -----------------------------

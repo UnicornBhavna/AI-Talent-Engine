@@ -77,17 +77,17 @@ def run_streamlit():
 # -----------------------------
 
 def main():
-    print("\n===================================")
-    print(" PIPELINE EXECUTION")
-    print("===================================\n")
+  #  print("\n===================================")
+  #  print(" PIPELINE EXECUTION")
+  #  print("===================================\n")
 
-    run_ingestion()
-    run_scoring()
+  #  run_ingestion()
+  #  run_scoring()
 
-    if os.path.exists("candidates.csv"):
-        print("\nPipeline complete ✔ candidates.csv generated\n")
-    else:
-        print("\nWarning: candidates.csv not found ⚠️\n")
+  #  if os.path.exists("candidates.csv"):
+  #      print("\nPipeline complete ✔ candidates.csv generated\n")
+  #  else:
+  #      print("\nWarning: candidates.csv not found ⚠️\n")
 
     run_streamlit()
 

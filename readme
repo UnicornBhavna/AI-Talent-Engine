@@ -1,0 +1,15 @@
+Streamlit Deployed Dashboard: https://ai-talent-engine-zw9jdtdpgzu4thfjdig7qe.streamlit.app
+
+How to run codes?
+Data is currently being accessed from Hugging Face (50K rows too big for GitHub)
+
+1. Get Raw data using ingestion.py (ensure people data labs API is being used for this) - add your own key
+ - Alternative to using API: create synthetic data using create_data.py
+ - Uncomment the respective portion being used from ingestion.py
+
+2. Run scoring.py for creating scores and tiers (and more)
+ - The creation logics have been added to the code
+
+3. Run UI.py to deploy the dashboard on Streamlit
+
+4. All above codes can be run directly using main.py (this is the final production-level code)

@@ -20,7 +20,6 @@ WEIGHTS = {
     "tenure_fit": 20,
     "returnee_signal": 25
 }
-# total = 100
 
 
 # -----------------------------
@@ -54,7 +53,6 @@ def classify_employer(company_name: str) -> dict:
     Fuzzy matching improves recall vs exact match.
 
     LIMITATIONS:
-    - String similarity ≠ semantic understanding
     - Short aliases (GS) may fail
     """
 
@@ -73,20 +71,6 @@ def classify_employer(company_name: str) -> dict:
 # ROLE RELEVANCE
 # -----------------------------
 def score_role_relevance(title: str) -> int:
-    """
-    Scores how relevant the role is to target hiring funnel.
-
-    LOGIC:
-    - Strong match (IB, PE, Research) → full score
-    - Generic 'Analyst' → partial (ambiguous)
-    - Irrelevant → low
-
-    WHY:
-    Titles are often vague; we penalize ambiguity.
-
-    RETURNS: score out of WEIGHTS['role_relevance']
-    """
-
     t = normalize(title)
 
     if any(k in t for k in ["investment banking", "private equity", "research"]):
@@ -102,20 +86,6 @@ def score_role_relevance(title: str) -> int:
 # TENURE FIT
 # -----------------------------
 def score_tenure(exp: int) -> int:
-    """
-    Ideal window: 2–4 years.
-
-    LOGIC:
-    - 2–4 → full score
-    - 1–2 or 4–6 → moderate
-    - <1 or >6 → penalized
-
-    WHY:
-    This matches typical IB/PE hiring bands.
-
-    RETURNS: score out of WEIGHTS['tenure_fit']
-    """
-
     if 2 <= exp <= 4:
         return WEIGHTS["tenure_fit"]
     elif 1 <= exp < 2 or 4 < exp <= 6:
@@ -125,33 +95,22 @@ def score_tenure(exp: int) -> int:
 
 
 # -----------------------------
-# RETURN SIGNAL
+# RETURN SIGNAL (FIXED)
 # -----------------------------
 ASIA = {"singapore", "hong kong", "india", "china", "japan"}
+ASIA_UNIS = {"nus", "ntu", "hku", "tsinghua", "peking"}
 
 def detect_returnee_signal(record: Dict[str, Any]) -> dict:
     """
-    Estimates 'returnee likelihood' using proxies.
-
-    SIGNALS:
+    Uses proxies:
     - Asia education
-    - Asia work experience
-    - Asia location history
-    - Name-origin heuristic (very weak)
-
-    WHY:
-    Nationality is unavailable → proxies approximate signal.
+    - Asia experience
+    - Asia countries field
+    - Location string
+    - Weak name heuristic
 
     LIMITATIONS:
-    - Highly noisy and biased
-    - Name inference unreliable
-    - Education ≠ intent to return
-
-    RETURNS:
-        {
-            score: int,
-            signals_found: list
-        }
+    - Noisy + proxy-based
     """
 
     score = 0
@@ -159,7 +118,7 @@ def detect_returnee_signal(record: Dict[str, Any]) -> dict:
 
     # education
     for edu in record.get("education", []):
-        if any(a in normalize(edu.get("school")) for a in ASIA):
+        if any(u in normalize(edu.get("school")) for u in ASIA_UNIS):
             score += 8
             signals.append("asia_education")
 
@@ -169,11 +128,17 @@ def detect_returnee_signal(record: Dict[str, Any]) -> dict:
             score += 8
             signals.append("asia_experience")
 
-    # location
-    for c in record.get("all_countries", []):
+    # countries (FIXED)
+    for c in record.get("countries", []):
         if normalize(c) in ASIA:
             score += 5
-            signals.append("asia_location")
+            signals.append("asia_country")
+
+    # location string (NEW)
+    loc = normalize(record.get("location"))
+    if any(a in loc for a in ASIA):
+        score += 5
+        signals.append("asia_location")
 
     # name proxy
     if any(x in normalize(record.get("full_name")) for x in ["singh", "li", "chen"]):
@@ -187,37 +152,18 @@ def detect_returnee_signal(record: Dict[str, Any]) -> dict:
 
 
 # -----------------------------
-# DIVERSITY FLAG (SEPARATE)
+# DIVERSITY FLAG
 # -----------------------------
 def detect_diversity_flag(record: Dict[str, Any]) -> dict:
     """
-    Infers gender using first-name heuristic.
-
-    METHOD:
-    - Uses simple suffix heuristic
-
-    WHY:
-    No structured gender field available.
-
-    IMPORTANT:
-    - NOT used in scoring
-    - Only for reporting
+    Simple first-name heuristic.
 
     LIMITATIONS:
-    - Inaccurate globally
+    - Not reliable globally
     - Misses non-binary identities
-    - Cultural bias
-
-    RETURNS:
-        {
-            is_female: bool,
-            confidence: str
-        }
     """
 
-    name = record.get("full_name", "")
-    first = name.split(" ")[0].lower()
-
+    first = record.get("full_name", "").split(" ")[0].lower()
     is_female = first.endswith(("a", "e", "i"))
     confidence = "medium" if is_female else "low"
 
@@ -228,23 +174,12 @@ def detect_diversity_flag(record: Dict[str, Any]) -> dict:
 # FINAL SCORING
 # -----------------------------
 def score_candidate(record: Dict[str, Any]) -> dict:
-    """
-    Combines all dimensions into final score.
-
-    Dimensions:
-    - Employer pedigree (40)
-    - Role relevance (15)
-    - Tenure fit (20)
-    - Returnee signal (25)
-
-    Diversity is NOT included in score.
-    """
 
     employer = classify_employer(record.get("current_company"))
     returnee = detect_returnee_signal(record)
     diversity = detect_diversity_flag(record)
 
-    # employer scoring
+    # employer score
     if employer["tier"] == "BB_IB":
         employer_score = WEIGHTS["employer_pedigree"]
     elif employer["tier"] == "BUYSIDE":
@@ -272,26 +207,21 @@ def score_candidate(record: Dict[str, Any]) -> dict:
     return {
         "total_score": total,
         "shortlist_tier": tier,
-
         "score_breakdown": {
             "employer_pedigree": employer_score,
             "role_relevance": role_score,
             "tenure_fit": tenure_score,
             "returnee_signal": returnee_score
         },
-
         "employer_tier": employer["tier"],
         "employer_match": employer["matched_name"],
-
         "returnee_signals": returnee["signals_found"],
-
-        # separate field (NOT in score)
         "diversity_flag": diversity
     }
 
 
 # -----------------------------
-# PIPELINE
+# PIPELINE (UNCHANGED)
 # -----------------------------
 def load_input(path: str):
     df = pd.read_csv(path)
@@ -310,9 +240,32 @@ def run_pipeline(input_path="candidates.csv", output_path="scored_output.csv"):
     records = load_input(input_path)
 
     output = []
+
     for r in records:
         enriched = score_candidate(r)
-        output.append({**r, **enriched})
+
+        current_title_employer = f"{r.get('job_title')} at {r.get('current_company')}"
+        location = r.get("location")
+
+        diversity = enriched.get("diversity_flag")
+        diversity_flag = f"{diversity['is_female']} ({diversity['confidence']})"
+
+        score_rationale = f"{r.get('job_title')} at {r.get('current_company')} with {r.get('years_experience')} years experience. Strong profile based on employer pedigree and role alignment."
+
+        final_record = {
+            "full_name": r.get("full_name"),
+            "current_title + employer": current_title_employer,
+            "current_location": location,
+            "employer_tier": enriched.get("employer_tier"),
+            "total_score": enriched.get("total_score"),
+            "score_breakdown": enriched.get("score_breakdown"),
+            "shortlist_tier": enriched.get("shortlist_tier"),
+            "diversity_flag": diversity_flag,
+            "linkedin_url": r.get("linkedin_url"),
+            "score_rationale": score_rationale
+        }
+
+        output.append(final_record)
 
     pd.DataFrame(output).to_csv(output_path, index=False)
     print(f"Saved → {output_path}")

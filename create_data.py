@@ -38,8 +38,6 @@ MBB_COMPANIES = [
     "McKinsey", "BCG", "Bain"
 ]
 
-ALL_COMPANIES = IB_COMPANIES + BUYSIDE_COMPANIES + MBB_COMPANIES
-
 # -----------------------------
 # ROLES
 # -----------------------------
@@ -57,7 +55,7 @@ MBB_ROLES = [
 ]
 
 # -----------------------------
-# EDUCATION (TARGET LIST)
+# EDUCATION
 # -----------------------------
 TARGET_UNIS = [
     "LSE", "Oxford", "Cambridge", "Imperial", "UCL",
@@ -67,14 +65,14 @@ TARGET_UNIS = [
 ]
 
 # -----------------------------
-# ASIAN HERITAGE SIGNALS
+# ASIA SIGNAL
 # -----------------------------
+ASIA_COUNTRIES = ["Singapore", "India", "China", "Malaysia"]
+
 ASIAN_NAMES = [
     "Aarav", "Arjun", "Wei", "Li", "Chen", "Ananya",
     "Rahul", "Kumar", "Tan", "Lim"
 ]
-
-ASIA_COUNTRIES = ["Singapore", "India", "China", "Malaysia"]
 
 # -----------------------------
 # HELPERS
@@ -94,42 +92,54 @@ def random_date():
 def generate_location(country):
     return f"{random.choice(CITIES[country])}, {country}"
 
+def generate_linkedin(name):
+    if random.random() < 0.8:
+        handle = name.lower().replace(" ", "-")
+        return f"https://www.linkedin.com/in/{handle}", handle
+    return None, None
+
 # -----------------------------
-# PROFILE BUILDER (STRICT)
+# PROFILE BUILDER
 # -----------------------------
 def build_profile(i):
 
-    # ---------------- Identity (bias towards Asian heritage)
+    # Identity
     first_name = random.choice(ASIAN_NAMES) if random.random() < 0.7 else fake.first_name()
     last_name = fake.last_name()
     full_name = f"{first_name} {last_name}"
 
-    # ---------------- Location (STRICT FILTER)
+    # Location
     country = random.choice(ALLOWED_LOCATIONS)
 
-    # ---------------- Track Selection
+    # Track selection
     track = random.choice(["IB", "BUYSIDE", "MBB"])
 
     if track == "IB":
         company = random.choice(IB_COMPANIES)
         job_title = random.choice(IB_ROLES)
+        industry = "Investment Banking"
 
     elif track == "BUYSIDE":
         company = random.choice(BUYSIDE_COMPANIES)
         job_title = random.choice(BUYSIDE_ROLES)
+        industry = "Asset Management / Private Equity"
 
-    else:  # MBB with finance linkage
+    else:
         company = random.choice(MBB_COMPANIES)
         job_title = random.choice(MBB_ROLES) + " - Private Equity / Corporate Finance"
+        industry = "Consulting (MBB - PE/CF)"
 
-    # ---------------- Experience (STRICT: 2–4 years)
+    # Experience
     years_experience = random.randint(2, 4)
 
-    # ---------------- Education (TARGET ONLY)
+    # Education
     university = random.choice(TARGET_UNIS)
 
-    # ---------------- Asia connection (MANDATORY SIGNAL)
+    # Asia signal
     asia_link = random.choice(ASIA_COUNTRIES)
+
+    # LinkedIn
+    linkedin_url, linkedin_id = generate_linkedin(full_name)
 
     profile = {
         "id": str(i),
@@ -141,9 +151,11 @@ def build_profile(i):
         "mobile_phone": random_phone(),
         "emails": random_email(full_name),
 
-        # LOCATION (NOT ASIA)
-        "current_location": generate_location(country),
-        "all_countries": [country, asia_link],  # ensures Asia linkage
+        # FIXED FIELDS
+        "location": generate_location(country),
+        "countries": [country, asia_link],
+        "industry": industry,
+
         "location_last_updated": random_date(),
 
         "current_company": company,
@@ -155,7 +167,7 @@ def build_profile(i):
                 "company": company,
                 "title": job_title,
                 "level": "Analyst" if years_experience < 3 else "Associate",
-                "industry": "Finance",
+                "industry": industry,
                 "country": country
             }
         ],
@@ -168,12 +180,13 @@ def build_profile(i):
             }
         ],
 
-        # Explicit Asia return signal (helps downstream model)
+        "linkedin_url": linkedin_url,
+        "linkedin_id": linkedin_id,
+
         "asia_connection": asia_link
     }
 
     return profile
-
 
 # -----------------------------
 # GENERATE

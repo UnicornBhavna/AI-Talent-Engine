@@ -237,10 +237,28 @@ st.plotly_chart(fig, use_container_width=True)
 # -----------------------------
 # EXPORT
 # -----------------------------
+
+export_df = filtered.rename(columns={
+    "current_title_employer": "current_title + employer"
+})[
+    [
+        "full_name",
+        "current_title + employer",
+        "current_location",
+        "employer_tier",
+        "total_score",
+        "score_breakdown",
+        "shortlist_tier",
+        "diversity_flag",
+        "linkedin_url",
+        "score_rationale"
+    ]
+]
+
 st.download_button(
     "⬇ Download Filtered Shortlist",
-    filtered.to_csv(index=False).encode("utf-8"),
+    export_df.to_csv(index=False).encode("utf-8"),
     "shortlist.csv",
     "text/csv",
-    help="Exports exactly what is shown in filtered view"
+    help="Exports only required columns in correct format"
 )
